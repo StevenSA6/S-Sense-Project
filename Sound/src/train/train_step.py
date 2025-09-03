@@ -2,8 +2,8 @@
 from typing import Dict, Optional
 import math
 import torch
-from sed_crnn import CRNN
-from losses import sed_loss, count_losses
+from models.sed_crnn import CRNN
+from models.losses import sed_loss, count_losses
 
 
 class Stepper:

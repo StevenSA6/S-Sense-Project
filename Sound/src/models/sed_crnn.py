@@ -4,8 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# ---- blocks ----
-
 
 def make_norm(norm: str, ch: int):
   if norm == "group":
@@ -61,8 +59,6 @@ class PosEnc(nn.Module):
 
   def forward(self, x):  # (B,T,H)
     return x + self.pe[:, :x.size(1), :]
-
-# ---- CRNN ----
 
 
 class CRNN(nn.Module):

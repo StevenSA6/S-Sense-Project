@@ -5,8 +5,8 @@ import torch
 from scipy.signal import medfilt
 
 from omegaconf import DictConfig
-from preprocess import load_audio, preprocess_waveform
-from features import FeatCfg, WindowCfg, extract_features, window_into_chunks
+from dataio.preprocess import load_audio, preprocess_waveform
+from dataio.features import FeatCfg, WindowCfg, extract_features, window_into_chunks
 
 
 def smooth_posteriors(p: np.ndarray, k: int, mode: str) -> np.ndarray:

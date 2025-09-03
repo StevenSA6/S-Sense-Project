@@ -9,8 +9,6 @@ from preprocess import compressor, CompressorCfg, expander, ExpanderCfg, apply_p
 from omegaconf import DictConfig
 from scipy.signal import lfilter
 
-# ---------- helpers ----------
-
 
 def _rand(p: float) -> bool: return random.random() < p
 def _db2lin(db: float) -> float: return 10**(db/20)
@@ -18,8 +16,6 @@ def _db2lin(db: float) -> float: return 10**(db/20)
 
 def _fixlen(y: np.ndarray, n: int) -> np.ndarray:
   return librosa.util.fix_length(y, size=n)
-
-# ---------- noise ----------
 
 
 def add_noise_snr(y: np.ndarray, snr_db: float, noise: Optional[np.ndarray] = None) -> np.ndarray:
@@ -43,8 +39,6 @@ def _pick_noise(noise_bank: Optional[str]) -> Optional[np.ndarray]:
   n, sr = librosa.load(fp, sr=None, mono=True)
   return n.astype(np.float32)
 
-# ---------- IR convolution ----------
-
 
 def apply_ir(y: np.ndarray, ir_dir: Optional[str], wet_db: float = -12.0) -> np.ndarray:
   if not ir_dir or not os.path.isdir(ir_dir):
@@ -60,8 +54,6 @@ def apply_ir(y: np.ndarray, ir_dir: Optional[str], wet_db: float = -12.0) -> np.
   out = fftconvolve(y, ir, mode="full")[:len(y)]
   return (y + wet*out).astype(np.float32)
 
-# ---------- EQ tilt ----------
-
 
 def eq_tilt(y: np.ndarray, sr: int, db_per_octave: float) -> np.ndarray:
   # implement as opposing low/high shelves around 1 kHz
@@ -76,8 +68,6 @@ def eq_tilt(y: np.ndarray, sr: int, db_per_octave: float) -> np.ndarray:
       tmp2, np.ndarray), f"tmp2 should be of type NDArray but got f{type(tmp2)} instead"
   return tmp2.astype(np.float32)
 
-# ---------- HPSS mix ----------
-
 
 def hpss_mix(y: np.ndarray, percussive_weight: float) -> np.ndarray:
   S = librosa.stft(y)
@@ -89,8 +79,6 @@ def hpss_mix(y: np.ndarray, percussive_weight: float) -> np.ndarray:
   out = (1-w)*y + w*Y_p
   return _fixlen(out.astype(np.float32), len(y))
 
-# ---------- time/pitch ----------
-
 
 def stretch(y: np.ndarray, rate: float) -> np.ndarray:
   return _fixlen(librosa.effects.time_stretch(y, rate=rate), len(y))
@@ -98,8 +86,6 @@ def stretch(y: np.ndarray, rate: float) -> np.ndarray:
 
 def pitch(y: np.ndarray, sr: int, steps: float) -> np.ndarray:
   return _fixlen(librosa.effects.pitch_shift(y, sr=sr, n_steps=steps), len(y))
-
-# ---------- “dry-food” sim ----------
 
 
 def dry_food_sim(y: np.ndarray, sr: int, atten_db: float, dur_scale: float) -> np.ndarray:
@@ -121,8 +107,6 @@ def dry_food_sim(y: np.ndarray, sr: int, atten_db: float, dur_scale: float) -> n
     y2 *= _db2lin(atten_db)
   return y2.astype(np.float32)
 
-# ---------- SpecAugment on mel ----------
-
 
 def specaugment(mel: np.ndarray, sr: int, hop: int,
                 time_mask_ms: int, time_masks: int,
@@ -142,26 +126,24 @@ def specaugment(mel: np.ndarray, sr: int, hop: int,
     M[f0:f0+w, :] = M[f0:f0+w, :].min()
   return M
 
-# ---------- master waveform augment ----------
-
 
 def augment_waveform(y: np.ndarray, sr: int, cfg: DictConfig) -> np.ndarray:
   if not cfg.augment.enabled:
     return y
   a = cfg.augment
 
-  # 1) additive noise
+  # additive noise
   if _rand(a.prob.add_noise):
     snr = random.uniform(a.add_noise.snr_db_min, a.add_noise.snr_db_max)
     n = _pick_noise(getattr(a.add_noise, "noise_bank", None))
     y = add_noise_snr(y, snr_db=snr, noise=n)
 
-  # 2) IR convolution
+  # IR convolution
   if _rand(a.prob.room_ir):
     y = apply_ir(y, getattr(a.room_ir, "ir_dir", None),
                  wet_db=a.room_ir.wet_db)
 
-  # 3) dynamic range
+  # dynamic range
   if _rand(a.prob.dynamic_range):
     mode = a.dynamic_range.mode
     if mode == "random":
@@ -179,30 +161,30 @@ def augment_waveform(y: np.ndarray, sr: int, cfg: DictConfig) -> np.ndarray:
                         5, 80)
       y = expander(y, sr, exp)
 
-  # 4) EQ tilt
+  # EQ tilt
   if _rand(a.prob.eq_tilt):
     tilt = random.uniform(a.eq_tilt.db_per_octave_min,
                           a.eq_tilt.db_per_octave_max)
     y = eq_tilt(y, sr, tilt)
 
-  # 5) HPSS mix
+  # HPSS mix
   if _rand(a.prob.hpss_mix):
     w = random.uniform(a.hpss_mix.percussive_weight_min,
                        a.hpss_mix.percussive_weight_max)
     y = hpss_mix(y, w)
 
-  # 6) time stretch
+  # time stretch
   if _rand(a.prob.time_stretch):
     rate = random.uniform(a.time_stretch.min, a.time_stretch.max)
     y = stretch(y, rate)
 
-  # 7) pitch shift
+  # pitch shift
   if _rand(a.prob.pitch_shift):
     steps = random.uniform(a.pitch_shift.semitones_min,
                            a.pitch_shift.semitones_max)
     y = pitch(y, sr, steps)
 
-  # 8) dry-food sim
+  # dry-food sim
   if _rand(a.prob.dry_food_sim):
     att = random.uniform(a.dry_food_sim.attenuate_db_min,
                          a.dry_food_sim.attenuate_db_max)

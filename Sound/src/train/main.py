@@ -1,9 +1,9 @@
 from omegaconf import OmegaConf, DictConfig
-from dataset import SwallowWindowDataset, DatasetConfig, read_jsonl, collate_batch
+from dataio.dataset import SwallowWindowDataset, DatasetConfig, read_jsonl, collate_batch
 from torch.utils.data import DataLoader
 
-from inference import infer_path
-from eval_metrics import event_f1_sed_eval, count_mae_mape, onset_mae, subject_macro
+from infer.inference import infer_path
+from infer.eval_metrics import event_f1_sed_eval, count_mae_mape, onset_mae, subject_macro
 
 cfg = OmegaConf.load("configs/initial_config.yaml")
 

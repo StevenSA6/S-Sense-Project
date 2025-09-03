@@ -17,10 +17,8 @@ from omegaconf import DictConfig
 from preprocess import load_audio, preprocess_waveform
 from features import FeatCfg, WindowCfg, extract_features, window_into_chunks
 from augment import augment_waveform, specaugment
-from targets import events_to_frame_targets, slice_targets_to_windows, counts_from_events
+from dataio.targets import events_to_frame_targets, slice_targets_to_windows, counts_from_events
 
-
-# ---------- manifest utilities ----------
 
 def read_jsonl(path: str) -> List[Dict[str, Any]]:
   """Each line: {"path": "...", "subject": "S01", "events":[{"onset":1.23,"offset":1.55}, ...]}"""
@@ -33,8 +31,6 @@ def read_jsonl(path: str) -> List[Dict[str, Any]]:
       out.append(json.loads(line))
   return out
 
-
-# ---------- dataset ----------
 
 @dataclass
 class DatasetConfig:
