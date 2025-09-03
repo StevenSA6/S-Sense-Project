@@ -278,15 +278,19 @@ evaluation:
   sed_eval_protocol: psds1 # optional
 
 logging:
+  run_naming: "{project_name}_{run_name}_{time}"   # time = YYYYmmdd-HHMMSS
   wandb:
     enabled: false
     entity: null
-  tensorboard:
-    enabled: true
+  tensorboard: true
   checkpoints:
     save_top_k: 3
     monitor: val/event_f1
     mode: max
+  save_every_epoch: true
+  save_last: true
+  save_best: true
+  top_k: 3
 
 baseline: # classical non-ML detector
   enabled: false
