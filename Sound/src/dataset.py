@@ -14,8 +14,8 @@ from torch.utils.data import Dataset
 
 from omegaconf import DictConfig
 # Your existing modules
-from process_data.preprocess import load_audio, preprocess_waveform
-from features.features import FeatCfg, WindowCfg, extract_features, window_into_chunks
+from preprocess import load_audio, preprocess_waveform
+from features import FeatCfg, WindowCfg, extract_features, window_into_chunks
 from augment import augment_waveform, specaugment
 from targets import events_to_frame_targets, slice_targets_to_windows, counts_from_events
 

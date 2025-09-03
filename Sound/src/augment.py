@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 import librosa
 from scipy.signal import fftconvolve
-from process_data.preprocess import compressor, CompressorCfg, expander, ExpanderCfg, apply_param_eq, biquad_shelf
+from preprocess import compressor, CompressorCfg, expander, ExpanderCfg, apply_param_eq, biquad_shelf
 from omegaconf import DictConfig
 from scipy.signal import lfilter
 
