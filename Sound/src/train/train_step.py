@@ -1,5 +1,5 @@
 # stepper.py
-from typing import Dict, Optional
+from typing import Dict
 import math
 import torch
 from models import build_model

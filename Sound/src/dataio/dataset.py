@@ -12,9 +12,9 @@ import torch
 from torch.utils.data import Dataset
 
 from omegaconf import DictConfig
-from preprocess import load_audio, preprocess_waveform
-from features import FeatCfg, WindowCfg, extract_features, window_into_chunks
-from augment import augment_waveform, specaugment
+from .preprocess import load_audio, preprocess_waveform
+from .features import FeatCfg, WindowCfg, extract_features, window_into_chunks
+from .augment import augment_waveform, specaugment
 from dataio.targets import events_to_frame_targets, counts_from_events
 
 
