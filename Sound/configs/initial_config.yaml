@@ -11,6 +11,11 @@ paths:
   test_manifest: ./manifests/test.jsonl
   out_dir: ./outputs
 
+cv:
+  enabled: true
+  folds: 5
+  split_by: subject # or "file" if subject labels aren't present
+
 hardware:
   num_workers: 8
   device: cuda
@@ -60,7 +65,7 @@ preprocess: # DSP before features
     release_ms: 80
   param_eq:
     enabled: false
-    bands: []   # list of {type: peaking|lowshelf|highshelf, f0: 1500, q: 1.0, gain_db: -4.0}
+    bands: [] # list of {type: peaking|lowshelf|highshelf, f0: 1500, q: 1.0, gain_db: -4.0}
   de_esser:
     enabled: false
     band_hz: [4000, 9000]
@@ -71,7 +76,7 @@ preprocess: # DSP before features
   expander:
     enabled: false
     threshold_db: -45
-    ratio: 2.0        # <1 upward, >1 downward; we implement downward
+    ratio: 2.0 # <1 upward, >1 downward; we implement downward
     attack_ms: 5
     release_ms: 80
   pipeline:
@@ -280,7 +285,7 @@ evaluation:
   sed_eval_protocol: psds1 # optional
 
 logging:
-  run_naming: "{project_name}_{run_name}_{time}"   # time = YYYYmmdd-HHMMSS
+  run_naming: "{project_name}_{run_name}_{time}" # time = YYYYmmdd-HHMMSS
   wandb:
     enabled: false
     entity: null
