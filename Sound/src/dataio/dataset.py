@@ -1,41 +1,43 @@
-# dataset.py
 from __future__ import annotations
-import json
 import math
-import os
 import random
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any
+from pathlib import Path
 import librosa
 import soundfile as sf
+import csv
 
 import torch
 from torch.utils.data import Dataset
 
 from omegaconf import DictConfig
-# Your existing modules
 from preprocess import load_audio, preprocess_waveform
 from features import FeatCfg, WindowCfg, extract_features, window_into_chunks
 from augment import augment_waveform, specaugment
-from dataio.targets import events_to_frame_targets, slice_targets_to_windows, counts_from_events
-
-
-def read_jsonl(path: str) -> List[Dict[str, Any]]:
-  """Each line: {"path": "...", "subject": "S01", "events":[{"onset":1.23,"offset":1.55}, ...]}"""
-  out = []
-  with open(path, "r", encoding="utf-8") as f:
-    for line in f:
-      line = line.strip()
-      if not line:
-        continue
-      out.append(json.loads(line))
-  return out
+from dataio.targets import events_to_frame_targets, counts_from_events
 
 
 @dataclass
 class DatasetConfig:
   cfg: DictConfig
   train: bool
+
+
+def load_events_csv(csv_path: Path) -> List[Dict[str, float]]:
+  """Read timestamps CSV into a list of events with onset/offset."""
+  if not csv_path.exists():
+    return []
+  events = []
+  with csv_path.open("r", newline="", encoding="utf-8") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+      s = float(row["start"])
+      e = float(row.get("end", s))
+      if e < s:
+        e = s
+      events.append({"onset": s, "offset": e})
+  return events
 
 
 class SwallowWindowDataset(Dataset):
@@ -81,25 +83,23 @@ class SwallowWindowDataset(Dataset):
         pad_mode=self.cfg.windowing.pad_mode,
     )
 
-    # Build an index of (file_idx, lazy_window) without precomputing audio.
-    # We estimate frames-per-chunk to know how many windows each file will yield after feature extraction.
     win, hop = _frame_params_ms(
         self.feat_cfg.sr, self.feat_cfg.win_ms, self.feat_cfg.hop_ms)
     self.frames_per_chunk = int(
         round(self.win_cfg.chunk_sec * self.feat_cfg.sr / hop))
-    self.hop = hop  # save for target building
-    # (file_idx, window_ordinal) — ordinal resolved on the fly
+    self.hop = hop
     self.index: List[Tuple[int, int]] = []
 
     for i, it in enumerate(self.items):
       n_frames = _estimate_frames(
           it["path"], target_sr=self.feat_cfg.sr, win=win, hop=hop)
-      step = max(
-          1, int(round(self.frames_per_chunk * (1.0 - self.win_cfg.overlap))))
+      step = max(1, int(round(self.frames_per_chunk *
+                              (1.0 - self.win_cfg.overlap))))
       if n_frames < self.frames_per_chunk:
         n_windows = 1
       else:
-        n_windows = 1 + math.floor((n_frames - self.frames_per_chunk) / step)
+        n_windows = 1 + math.floor(
+            (n_frames - self.frames_per_chunk) / step)
       for w in range(n_windows):
         self.index.append((i, w))
 
@@ -109,22 +109,20 @@ class SwallowWindowDataset(Dataset):
   def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
     file_idx, w_ord = self.index[idx]
     item = self.items[file_idx]
+    path = Path(item["path"])
 
     # Load and DSP preprocess to model_sr
-    y, sr_raw = load_audio(item["path"], expected_sr=None, mono=True)
-    # respects pipeline + resample
+    y, sr_raw = load_audio(str(path), expected_sr=None, mono=True)
     y_p, aux = preprocess_waveform(y, sr_raw, self.cfg)
 
-    # On-the-fly waveform augmentation (train only)
     if self.train and self.cfg.augment.enabled:
       y_p = augment_waveform(y_p, self.cfg.audio_io.model_sr, self.cfg)
 
-    # Features for full clip (T frames)
     X, F, hop = extract_features(
         y_p, self.cfg.audio_io.model_sr, self.feat_cfg, aux=aux)
 
-    # Optional SpecAugment on base mel channel (train only)
-    if self.train and self.cfg.augment.enabled and random.random() < self.cfg.augment.prob.specaugment:
+    if self.train and self.cfg.augment.enabled and \
+       random.random() < self.cfg.augment.prob.specaugment:
       X[0] = specaugment(
           X[0], self.cfg.audio_io.model_sr, hop,
           self.cfg.augment.specaugment.time_mask_ms,
@@ -133,24 +131,26 @@ class SwallowWindowDataset(Dataset):
           self.cfg.augment.specaugment.freq_masks,
       )
 
-    # Window the full sequence, then pick the requested window ordinal
     W, idxs = window_into_chunks(
         X, self.cfg.audio_io.model_sr, hop, self.win_cfg)
-    if not idxs:  # degenerate case: force one window
+    if not idxs:
       W = X[:, :, :self.frames_per_chunk][None, ...]
       idxs = [(0, min(self.frames_per_chunk, X.shape[-1]))]
     w_ord = min(w_ord, len(idxs)-1)
-    x = W[w_ord]  # (C,F,Tw)
+    x = W[w_ord]
     t0, t1 = idxs[w_ord]
 
-    # Targets
-    # list of {"onset": s, "offset": s} or {"onset": s}
-    events = item.get("events", [])
-    weak_dur = float(self.cfg.labels.get("weak_dur_sec", 0.4)
-                     )  # fallback if not in config
+    # Load labels from CSV if not pre-supplied
+    events = item.get("events")
+    if events is None:
+      csv_path = Path(self.cfg.paths.timestamps_dir) / f"{path.stem}.csv"
+      events = load_events_csv(csv_path)
+
+    weak_dur = float(self.cfg.labels.get("weak_dur_sec", 0.4))
     soft_band = int(self.cfg.labels.get("positive_dilation_frames", 0))
     min_frames = int(round(self.cfg.labels.min_event_sec *
-                     self.cfg.audio_io.model_sr / hop)) if "min_event_sec" in self.cfg.labels else 0
+                           self.cfg.audio_io.model_sr / hop)) if \
+        "min_event_sec" in self.cfg.labels else 0
 
     y_frames_full = events_to_frame_targets(
         events=events,
@@ -167,9 +167,9 @@ class SwallowWindowDataset(Dataset):
         events, [(t0, t1)], sr=self.cfg.audio_io.model_sr, hop=hop)[0]
 
     return {
-        "x": torch.from_numpy(x),                    # (C,F,Tw)
-        "y": torch.from_numpy(y_win).float(),        # (Tw,)
-        "count": torch.tensor(count_win, dtype=torch.float32),  # ()
+        "x": torch.from_numpy(x),
+        "y": torch.from_numpy(y_win).float(),
+        "count": torch.tensor(count_win, dtype=torch.float32),
     }
 
 
@@ -180,25 +180,20 @@ def _frame_params_ms(sr: int, win_ms: float, hop_ms: float) -> Tuple[int, int]:
 
 
 def _estimate_frames(path: str, target_sr: int, win: int, hop: int) -> int:
-  """Cheap duration probe to estimate STFT frame count."""
   try:
     info = sf.info(path)
     n_samples = info.frames
     sr_in = info.samplerate
   except Exception:
-    # fallback: load header via librosa
     y, sr_in = librosa.load(path, sr=None, mono=True, duration=1.0)
-    # skip precise load; we can do an OS stat as last resort
     n_samples = int(librosa.get_duration(filename=path) * sr_in)
-  # estimate post-resample samples
   n_resamp = int(round(n_samples * (target_sr / float(sr_in))))
-  # stft frames (center=True)
   T = 1 + int(math.floor((n_resamp + hop//2) / hop))
   return T
 
 
 def collate_batch(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
-  xs = torch.stack([b["x"] for b in batch], dim=0)         # (B,C,F,Tw)
-  ys = torch.stack([b["y"] for b in batch], dim=0)         # (B,Tw)
-  cnt = torch.stack([b["count"] for b in batch], dim=0)    # (B,)
+  xs = torch.stack([b["x"] for b in batch], dim=0)
+  ys = torch.stack([b["y"] for b in batch], dim=0)
+  cnt = torch.stack([b["count"] for b in batch], dim=0)
   return {"x": xs, "y": ys, "count": cnt}
