@@ -37,7 +37,8 @@ def _refs_for(items: List[Dict[str, Any]], timestamps_dir: str) -> Dict[str, Lis
 @torch.no_grad()
 def evaluate_fold(cfg: DictConfig, fold_id: int, model: torch.nn.Module) -> Dict[str, float]:
   # validation set = held-out subjects of this fold
-  items = scan_audio_dir(cfg.paths.audio_dir)
+  subj_mode = getattr(getattr(cfg.data, "subject_id", {}), "mode", "prefix")
+  items = scan_audio_dir(cfg.paths.audio_dir, mode=subj_mode)
   train_idx, val_idx = make_folds(
       items, cfg.cv.folds, cfg.cv.split_by)[fold_id]
   val_items = [items[i] for i in val_idx]
