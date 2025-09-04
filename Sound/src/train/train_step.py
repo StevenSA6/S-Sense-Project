@@ -2,7 +2,7 @@
 from typing import Dict, Optional
 import math
 import torch
-from models.sed_crnn import CRNN
+from models import build_model
 from models.losses import sed_loss, count_losses
 
 
@@ -10,7 +10,7 @@ class Stepper:
   def __init__(self, cfg: Dict):
     self.cfg = cfg
     self.device = cfg["hardware"]["device"]
-    self.net = CRNN(cfg).to(self.device)
+    self.net = build_model(cfg).to(self.device)
 
     self.opt = torch.optim.AdamW(  # pyright: ignore[reportPrivateImportUsage]
         self.net.parameters(),
