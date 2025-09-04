@@ -115,8 +115,8 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
   device = cfg.hardware.device
 
   # discover files and subjects
-  subj_mode = getattr(getattr(cfg.data, "subject_id", {}), "mode", "prefix")
-  items = scan_audio_dir(cfg.paths.audio_dir, mode=subj_mode)
+  # subj_mode = getattr(getattr(cfg.data, "subject_id", {}), "mode", "prefix")
+  items = scan_audio_dir(cfg.paths.audio_dir, cfg.paths.timestamps_dir)
   folds = make_folds(items, cfg.cv.folds, cfg.cv.split_by)
   train_idx, val_idx = folds[fold_id]
   train_items = [items[i] for i in train_idx]
