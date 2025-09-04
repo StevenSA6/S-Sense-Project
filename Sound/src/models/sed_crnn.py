@@ -29,7 +29,8 @@ class SE(nn.Module):
 class DSConv(nn.Module):
   def __init__(self, c_in, c_out, k=(3, 3), s=(1, 1), norm="batch", p=0.0, se=True):
     super().__init__()
-    self.dw = nn.Conv2d(c_in, c_in, k, s, padding="same",
+    pad = (k[0]//2, k[1]//2)
+    self.dw = nn.Conv2d(c_in, c_in, k, s, padding=pad,
                         groups=c_in, bias=False)
     self.pw = nn.Conv2d(c_in, c_out, 1, bias=False)
     self.bn = make_norm(norm, c_out)
