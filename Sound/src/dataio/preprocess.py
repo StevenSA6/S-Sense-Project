@@ -287,6 +287,8 @@ def rms_envelope(y: np.ndarray, sr: int, win_ms: int, release_ms: int) -> np.nda
 
 
 def preprocess_waveform(y: np.ndarray, sr: int, cfg: DictConfig) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+  if not getattr(cfg.preprocess, "enabled", True):
+    return y.astype(np.float32), {}
   aux: Dict[str, np.ndarray] = {}
   for step in cfg.preprocess.pipeline:
     if step == "dc_block" and cfg.preprocess.get("dc_block", {}).get("enabled", False):
