@@ -53,14 +53,32 @@ def evaluate_fold(cfg: DictConfig, fold_id: int, model: torch.nn.Module) -> Dict
   refs_by_file = _refs_for(val_items, cfg.paths.timestamps_dir)
 
   # metrics
-  ev = event_f1_sed_eval(refs_by_file, preds_by_file,
-                         onset_tol=float(cfg.metrics.onset_tol_sec),
-                         offset_tol=float(cfg.metrics.offset_tol_sec))
-  cnt = count_mae_mape(refs_by_file, preds_by_file)
-  omt = onset_mae(refs_by_file, preds_by_file,
-                  match_tol=float(cfg.metrics.onset_tol_sec))
+  tol_cfg = cfg.evaluation.tolerances
+  onset_tol = float(tol_cfg.onset_ms) / 1000.0
+  offset_tol = float(tol_cfg.offset_ms) / 1000.0
 
-  out = {"event_f1": ev["F1"], "event_precision": ev["Precision"],
-         "event_recall": ev["Recall"], "count_mae": cnt["MAE"],
-         "count_mape_%": cnt["MAPE_%"], "onset_mae_sec": omt}
+  metrics_cfg = getattr(cfg.evaluation, "metrics", {})
+  out: Dict[str, float] = {}
+
+  if metrics_cfg.get("event_f1", True):
+    ev = event_f1_sed_eval(
+        refs_by_file,
+        preds_by_file,
+        onset_tol=onset_tol,
+        offset_tol=offset_tol,
+    )
+    out.update({
+        "event_f1": ev["F1"],
+        "event_precision": ev["Precision"],
+        "event_recall": ev["Recall"],
+    })
+
+  if metrics_cfg.get("count_mae", True):
+    cnt = count_mae_mape(refs_by_file, preds_by_file)
+    out.update({"count_mae": cnt["MAE"], "count_mape_%": cnt["MAPE_%"]})
+
+  if metrics_cfg.get("onset_mae", True):
+    omt = onset_mae(refs_by_file, preds_by_file, match_tol=onset_tol)
+    out["onset_mae_sec"] = omt
+
   return out
