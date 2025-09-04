@@ -4,6 +4,8 @@ run_name: default
 
 paths:
   data_root: ./data
+  audio_dir: data/audio
+  timestamps_dir: data/timestamps
   train_manifest: ./manifests/train.jsonl # wav path + event timings
   val_manifest: ./manifests/val.jsonl
   test_manifest: ./manifests/test.jsonl
