@@ -2,16 +2,18 @@ from __future__ import annotations
 import os
 import re
 import time
+import math
+from pathlib import Path
 from typing import Any, Dict, Tuple, cast
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 # fmt: off
 from torch.utils.tensorboard import SummaryWriter # pyright: ignore[reportPrivateImportUsage]
 # fmt: on
 from omegaconf import DictConfig, OmegaConf
 
-from dataio.dataset import SwallowWindowDataset, DatasetConfig, collate_batch
+from dataio.dataset import SwallowWindowDataset, DatasetConfig, collate_batch, load_events_csv, _estimate_frames
 from dataio.discovery import scan_audio_dir
 from dataio.splits import make_folds
 from models.sed_crnn import CRNN
@@ -58,6 +60,53 @@ def _prune_topk(run_dir: str, top_k: int):
     except OSError:
       pass
 
+
+def _compute_class_balance(items, ds, cfg):
+  sr = cfg.audio_io.model_sr
+  hop = ds.hop
+  fpc = ds.frames_per_chunk
+  step = max(1, int(round(fpc*(1.0-cfg.windowing.overlap))))
+  win = int(round(sr*cfg.features.win_ms/1000.0))
+  weights_tmp = []
+  pos_frames = 0
+  total_frames = 0
+  pos_wins = neg_wins = 0
+  aroot = Path(cfg.paths.audio_dir)
+  tsroot = Path(cfg.paths.timestamps_dir)
+  for it in items:
+    path = Path(it["path"])
+    events = it.get("events")
+    if events is None:
+      rel = path.relative_to(aroot).with_suffix(".csv")
+      events = load_events_csv(tsroot / rel)
+    n_frames = _estimate_frames(str(path), target_sr=sr, win=win, hop=hop)
+    n_wins = 1 if n_frames < fpc else 1+math.floor((n_frames-fpc)/step)
+    for w in range(n_wins):
+      t0 = w*step
+      t1 = min(t0+fpc, n_frames)
+      total_frames += (t1-t0)
+      ws = t0*hop/sr
+      we = t1*hop/sr
+      pos_len = 0.0
+      for ev in events:
+        s = float(ev["onset"])
+        e = float(ev.get("offset", s))
+        if e <= ws or s >= we:
+          continue
+        pos_len += min(e, we) - max(s, ws)
+      pf = int(round(pos_len*sr/hop))
+      pos_frames += pf
+      if pos_len > 0:
+        weights_tmp.append(True)
+        pos_wins += 1
+      else:
+        weights_tmp.append(False)
+        neg_wins += 1
+  pw = 1.0/pos_wins if pos_wins > 0 else 0.0
+  nw = 1.0/neg_wins if neg_wins > 0 else 0.0
+  weights = [pw if v else nw for v in weights_tmp]
+  return weights, pos_frames, total_frames
+
 # ---------- core ----------
 
 
@@ -76,7 +125,20 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
       train_items, DatasetConfig(cfg=cfg, train=True))
   val_ds = SwallowWindowDataset(
       val_items,   DatasetConfig(cfg=cfg, train=False))
-  train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size, shuffle=True,
+
+  sampler = None
+  if cfg.training.class_balance.sampler or cfg.training.class_balance.pos_weight_auto:
+    weights, posf, totalf = _compute_class_balance(train_items, train_ds, cfg)
+    if cfg.training.class_balance.pos_weight_auto and posf > 0:
+      negf = totalf - posf
+      beta = cfg.training.class_balance.beta
+      cfg.loss.sed.pos_weight = float(negf/posf * beta)
+    if cfg.training.class_balance.sampler:
+      sampler = WeightedRandomSampler(torch.tensor(weights, dtype=torch.double),
+                                      num_samples=len(weights), replacement=True)
+
+  train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size,
+                        shuffle=(sampler is None), sampler=sampler,
                         num_workers=cfg.hardware.num_workers, pin_memory=True, collate_fn=collate_batch)
   val_dl = DataLoader(val_ds, batch_size=cfg.training.batch_size, shuffle=False,
                       num_workers=cfg.hardware.num_workers, pin_memory=True, collate_fn=collate_batch)
