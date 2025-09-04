@@ -102,6 +102,14 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
   run_dir = _make_run_dir(cfg, suffix=f"_fold{fold_id}")
   writer = SummaryWriter(os.path.join(run_dir, "tb")
                          ) if cfg.logging.tensorboard else None
+  wandb_run = None
+  if cfg.logging.wandb.enabled:
+    import wandb  # pyright: ignore[reportMissingImports]
+    wandb_run = wandb.init(project=cfg.project_name,
+                           entity=cfg.logging.wandb.entity,
+                           name=f"{cfg.run_name}_fold{fold_id}",
+                           dir=run_dir,
+                           config=OmegaConf.to_container(cfg, resolve=True))
   scaler = torch.cuda.amp.GradScaler(enabled=(cfg.hardware.precision == 16))
   best = float(
       "-inf") if cfg.logging.checkpoints.mode == "max" else float("inf")
@@ -130,6 +138,8 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
       scaler.update()
       if writer:
         writer.add_scalar("train/loss", float(loss.item()), global_step)
+      if wandb_run:
+        wandb_run.log({"train/loss": float(loss.item())}, step=global_step)
       global_step += 1
     if sch is not None:
       sch.step()
@@ -160,6 +170,8 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
     if writer:
       for k, v in val_metrics.items():
         writer.add_scalar(k, v, epoch)
+    if wandb_run:
+      wandb_run.log(val_metrics, step=epoch)
 
     mon = _metric_selection(cfg, val_metrics)
     key = cfg.logging.checkpoints.monitor.replace("/", "-")
@@ -184,6 +196,8 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
 
     if writer:
       writer.close()
+    if wandb_run:
+      wandb_run.finish()
     # load best for evaluation caller
     best_ckpt = os.path.join(run_dir, "best.ckpt")
     # keep the in-memory model already at last epoch; optionally reload best:
