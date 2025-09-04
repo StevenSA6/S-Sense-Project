@@ -2,7 +2,7 @@
 from typing import Dict
 import math
 import torch
-from models import build_model
+from models import build_model, infer_in_channels
 from models.losses import sed_loss, count_losses
 
 
@@ -10,6 +10,8 @@ class Stepper:
   def __init__(self, cfg: Dict):
     self.cfg = cfg
     self.device = cfg["hardware"]["device"]
+    in_ch = infer_in_channels(cfg)
+    cfg.model.in_channels = int(in_ch)  # # type: ignore
     self.net = build_model(cfg).to(self.device)
 
     self.opt = torch.optim.AdamW(  # pyright: ignore[reportPrivateImportUsage]

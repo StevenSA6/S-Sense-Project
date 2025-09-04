@@ -17,7 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 from dataio.dataset import SwallowWindowDataset, DatasetConfig, collate_batch, load_events_csv, _estimate_frames
 from dataio.discovery import scan_audio_dir
 from dataio.splits import make_folds
-from models import build_model
+from models import build_model, infer_in_channels
 from models.losses import sed_loss, count_losses
 
 # ---------- util ----------
@@ -152,6 +152,8 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
   cfg_dict: Dict[str, Any] = cast(Dict[str, Any], raw)
 
   # model + optim
+  in_ch = infer_in_channels(cfg)
+  cfg.model.in_channels = int(in_ch)  # <- ensures CRNN sees the right C
   net = build_model(cast(Dict[str, Any], OmegaConf.to_container(
       cfg, resolve=True))).to(device)
   opt = torch.optim.AdamW(net.parameters(), lr=cfg.optimizer.lr,  # pyright: ignore[reportPrivateImportUsage]
