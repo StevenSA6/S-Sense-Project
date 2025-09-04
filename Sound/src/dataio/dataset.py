@@ -57,6 +57,7 @@ class SwallowWindowDataset(Dataset):
     # feature cfg mapping from Hydra config
     fcfg = self.cfg.features
     self.feat_cfg = FeatCfg(
+        type=getattr(fcfg, "type", "mel"),
         sr=self.cfg.audio_io.model_sr,
         n_fft=getattr(fcfg, "n_fft", 512),
         win_ms=fcfg.win_ms,

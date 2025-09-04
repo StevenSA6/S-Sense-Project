@@ -133,6 +133,7 @@ def infer_path(
   # features (full length)
   fcfg = cfg.features
   feat_cfg = FeatCfg(
+      type=getattr(fcfg, "type", "mel"),
       sr=cfg.audio_io.model_sr,
       n_fft=getattr(fcfg, "n_fft", 512),
       win_ms=fcfg.win_ms, hop_ms=fcfg.hop_ms,

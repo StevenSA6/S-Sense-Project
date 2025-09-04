@@ -6,6 +6,7 @@ import librosa
 
 @dataclass
 class FeatCfg:
+  type: str = "mel"
   sr: int = 16000
   n_fft: int = 512
   win_ms: float = 25.0
@@ -128,22 +129,29 @@ def extract_features(
     aux: Optional[Dict[str, np.ndarray]] = None
 ) -> Tuple[np.ndarray, int, int]:
   """
-  Returns X of shape (C, F, T), F=n_mels, C=1(+deltas)+aux_channels.
+  Returns X of shape (C, F, T), where F depends on feature type
+  (e.g. n_mels for mel). C=1(+deltas)+aux_channels.
   """
   assert sr == cfg.sr, f"Expected sr={cfg.sr}, got {sr}"
   mag, _, hop = _stft_mag(y, cfg)
-  mel = _mel_log(mag, cfg)  # (F,T)
+
+  if cfg.type == "mel":
+    feat = _mel_log(mag, cfg)
+  elif cfg.type == "spec":
+    feat = np.log(mag + cfg.log_eps).astype(np.float32)
+  else:
+    raise ValueError(f"Unsupported feature type: {cfg.type}")
 
   if cfg.standardize:
-    mel = _standardize(mel, cfg.standardize_per_recording,
-                       cfg.calibration_secs, cfg)
+    feat = _standardize(feat, cfg.standardize_per_recording,
+                        cfg.calibration_secs, cfg)
 
-  # base channels
   if cfg.deltas_enabled:
-    base = _delta_stack(mel, cfg.deltas_order)  # (C,F,T)
+    base = _delta_stack(feat, cfg.deltas_order)
   else:
-    base = mel[None, ...]  # (1,F,T)
+    base = feat[None, ...]
 
+  T = feat.shape[1]
   chans: List[np.ndarray] = [base]
 
   if cfg.aux_enabled:
@@ -153,21 +161,20 @@ def extract_features(
     if cfg.aux_centroid:
       aux_list.append(_spectral_centroid(mag, cfg.sr, cfg.n_fft))
     if cfg.aux_zcr:
-      aux_list.append(_zcr(y, cfg, mel.shape[1]))
+      aux_list.append(_zcr(y, cfg, T))
     if cfg.aux_perc_mask_mean:
       aux_list.append(_perc_mask_mean(mag))
     if cfg.aux_env_rms and aux is not None and "envelope_rms" in aux:
       aux_list.append(_align_env_to_frames(
-          aux["envelope_rms"], hop, mel.shape[1]))
+          aux["envelope_rms"], hop, T))
 
     if aux_list:
-      A = np.stack(aux_list, axis=0)  # (A,T)
-      # Tile scalar frame features across frequency to form channels
-      A_tiled = np.repeat(A[:, None, :], mel.shape[0], axis=1)  # (A,F,T)
+      A = np.stack(aux_list, axis=0)
+      A_tiled = np.repeat(A[:, None, :], feat.shape[0], axis=1)
       chans.append(A_tiled.astype(np.float32))
 
-  X = np.concatenate(chans, axis=0).astype(np.float32)  # (C,F,T)
-  return X, mel.shape[0], hop
+  X = np.concatenate(chans, axis=0).astype(np.float32)
+  return X, feat.shape[0], hop
 
 
 def window_into_chunks(
