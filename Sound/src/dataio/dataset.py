@@ -118,7 +118,7 @@ class SwallowWindowDataset(Dataset):
     if self.train and self.cfg.augment.enabled:
       y_p = augment_waveform(y_p, self.cfg.audio_io.model_sr, self.cfg)
 
-    X, F, hop = extract_features(
+    X, _, hop = extract_features(
         y_p, self.cfg.audio_io.model_sr, self.feat_cfg, aux=aux)
 
     if self.train and self.cfg.augment.enabled and \
@@ -143,7 +143,10 @@ class SwallowWindowDataset(Dataset):
     # Load labels from CSV if not pre-supplied
     events = item.get("events")
     if events is None:
-      csv_path = Path(self.cfg.paths.timestamps_dir) / f"{path.stem}.csv"
+      audio_root = Path(self.cfg.paths.audio_dir)
+      ts_root = Path(self.cfg.paths.timestamps_dir)
+      rel = path.relative_to(audio_root).with_suffix(".csv")  # e.g. s1/xyz.csv
+      csv_path = ts_root / rel
       events = load_events_csv(csv_path)
 
     weak_dur = float(self.cfg.labels.get("weak_dur_sec", 0.4))

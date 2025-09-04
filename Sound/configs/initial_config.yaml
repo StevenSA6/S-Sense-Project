@@ -11,6 +11,10 @@ paths:
   test_manifest: ./manifests/test.jsonl
   out_dir: ./outputs
 
+data:
+  subject_id:
+    mode: parent_dir
+
 cv:
   enabled: true
   folds: 5
