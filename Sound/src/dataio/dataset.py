@@ -185,15 +185,15 @@ def _frame_params_ms(sr: int, win_ms: float, hop_ms: float) -> Tuple[int, int]:
 
 
 def _estimate_frames(path: str, target_sr: int, win: int, hop: int) -> int:
+  """Estimate frame count after resampling to target_sr without loading audio."""
   try:
     info = sf.info(path)
-    n_samples = info.frames
-    sr_in = info.samplerate
+    duration_s = info.frames / float(info.samplerate)
   except Exception:
-    y, sr_in = librosa.load(path, sr=None, mono=True, duration=1.0)
-    n_samples = int(librosa.get_duration(filename=path) * sr_in)
-  n_resamp = int(round(n_samples * (target_sr / float(sr_in))))
-  T = 1 + int(math.floor((n_resamp + hop//2) / hop))
+    # librosa will use audioread as needed; use new kwarg 'path'
+    duration_s = float(librosa.get_duration(path=path))
+  n_resamp = int(round(duration_s * target_sr))
+  T = 1 + int(math.floor((n_resamp + hop // 2) / hop))
   return T
 
 

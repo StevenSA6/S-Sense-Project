@@ -69,15 +69,19 @@ def eq_tilt(y: np.ndarray, sr: int, db_per_octave: float) -> np.ndarray:
   return tmp2.astype(np.float32)
 
 
-def hpss_mix(y: np.ndarray, percussive_weight: float) -> np.ndarray:
+def hpss_mix(y: np.ndarray, w: float) -> np.ndarray:
+  """Blend original with percussive stem; preserve length and dtype."""
+  # STFT
   S = librosa.stft(y)
-  Hm, Pm = librosa.decompose.hpss(
-      np.abs(S), mask=True, margin=(1.0, 1.0), power=2.0)
-  Y_h = librosa.istft(S * Hm)
-  Y_p = librosa.istft(S * Pm)
-  w = float(np.clip(percussive_weight, 0.0, 1.0))
-  out = (1-w)*y + w*Y_p
-  return _fixlen(out.astype(np.float32), len(y))
+  # HPSS masks
+  H, P = librosa.decompose.hpss(S, mask=True)
+  # Reconstruct percussive and FORCE output length to match input
+  y_p = librosa.istft(S * P, length=len(y))
+  # Blend
+  out = (1.0 - float(w)) * y.astype(np.float32) + \
+      float(w) * y_p.astype(np.float32)
+  # Guard any tiny drift beyond [-1,1]
+  return np.clip(out, -1.0, 1.0).astype(np.float32)
 
 
 def stretch(y: np.ndarray, rate: float) -> np.ndarray:

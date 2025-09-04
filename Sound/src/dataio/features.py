@@ -102,10 +102,9 @@ def _perc_mask_mean(mag: np.ndarray) -> np.ndarray:
 
 
 def _align_env_to_frames(env: np.ndarray, hop: int, T: int) -> np.ndarray:
-  # Sample envelope at frame centers
   centers = np.arange(T) * hop
-  idx = np.clip(centers, 0, len(env) - 1)
-  return env[idx].astype(np.float32)
+  idx = np.clip(centers, 0, len(env) - 1).astype(int)
+  return _safe_vec(env[idx])
 
 
 def _standardize(M: np.ndarray, per_recording: bool, calibration_secs: float, cfg: FeatCfg) -> np.ndarray:
@@ -120,6 +119,19 @@ def _standardize(M: np.ndarray, per_recording: bool, calibration_secs: float, cf
   mu = np.median(cal, axis=1, keepdims=True)
   sig = np.median(np.abs(cal - mu), axis=1, keepdims=True) + 1e-6
   return (M - mu) / sig
+
+
+def _safe_vec(v: np.ndarray) -> np.ndarray:
+  v = np.asarray(v, dtype=np.float32)
+  v = np.nan_to_num(v, nan=0.0, posinf=0.0, neginf=0.0)
+  return np.clip(v, -1e6, 1e6)
+
+
+def _fit_to_T(v: np.ndarray, T: int) -> np.ndarray:
+  v = _safe_vec(v)
+  if v.shape[0] != T:
+    v = librosa.util.fix_length(v, size=T)
+  return v
 
 
 def extract_features(
@@ -165,10 +177,10 @@ def extract_features(
     if cfg.aux_perc_mask_mean:
       aux_list.append(_perc_mask_mean(mag))
     if cfg.aux_env_rms and aux is not None and "envelope_rms" in aux:
-      aux_list.append(_align_env_to_frames(
-          aux["envelope_rms"], hop, T))
+      aux_list.append(_align_env_to_frames(aux["envelope_rms"], hop, T))
 
     if aux_list:
+      aux_list = [_fit_to_T(v, T) for v in aux_list]
       A = np.stack(aux_list, axis=0)
       A_tiled = np.repeat(A[:, None, :], feat.shape[0], axis=1)
       chans.append(A_tiled.astype(np.float32))
