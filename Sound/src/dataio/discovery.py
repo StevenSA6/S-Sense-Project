@@ -3,7 +3,7 @@ from typing import List, Dict, Any
 
 
 def scan_audio_dir(audio_dir: str) -> List[Dict[str, Any]]:
-  exts = {".wav", ".flac", ".ogg", ".mp3"}
+  exts = {".wav", ".flac", ".ogg", ".mp3", "m4a"}
   items: List[Dict[str, Any]] = []
   for p in sorted(Path(audio_dir).glob("*")):
     if p.suffix.lower() in exts:

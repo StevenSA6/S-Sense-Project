@@ -32,7 +32,7 @@ def _pick_noise(noise_bank: Optional[str]) -> Optional[np.ndarray]:
   if not noise_bank or not os.path.isdir(noise_bank):
     return None
   cands = [f for f in os.listdir(
-      noise_bank) if f.lower().endswith((".wav", ".flac", ".ogg"))]
+      noise_bank) if f.lower().endswith((".wav", ".flac", ".ogg", ".mp3", "m4a"))]
   if not cands:
     return None
   fp = os.path.join(noise_bank, random.choice(cands))
@@ -44,7 +44,7 @@ def apply_ir(y: np.ndarray, ir_dir: Optional[str], wet_db: float = -12.0) -> np.
   if not ir_dir or not os.path.isdir(ir_dir):
     return y
   irs = [f for f in os.listdir(
-      ir_dir) if f.lower().endswith((".wav", ".flac", ".ogg"))]
+      ir_dir) if f.lower().endswith((".wav", ".flac", ".ogg", ".mp3", "m4a"))]
   if not irs:
     return y
   ir, sr = librosa.load(os.path.join(
