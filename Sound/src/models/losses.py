@@ -1,4 +1,5 @@
 from typing import Dict, Optional
+from omegaconf import DictConfig
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -53,7 +54,7 @@ def count_losses(
     logits: torch.Tensor,      # (B,T)
     hop: int,
     sr: int,
-    cfg: Dict
+    cfg: DictConfig | Dict
 ):
   total = torch.tensor(0.0, device=logits.device)
   if cfg["model"]["heads"].get("count", {}).get("enabled", False) and count_targets is not None:

@@ -73,7 +73,8 @@ class SwallowWindowDataset(Dataset):
         aux_centroid=fcfg.aux_channels.centroid,
         aux_zcr=fcfg.aux_channels.zcr,
         aux_perc_mask_mean=fcfg.aux_channels.percussive_mask_mean,
-        aux_env_rms=fcfg.aux_channels.envelope_rms and getattr(self.cfg.preprocess, "enabled", True),
+        aux_env_rms=fcfg.aux_channels.envelope_rms and getattr(
+            self.cfg.preprocess, "enabled", True),
         standardize=fcfg.standardize.enabled,
         standardize_per_recording=fcfg.standardize.per_recording,
         calibration_secs=fcfg.standardize.calibration_secs,

@@ -83,7 +83,8 @@ class CRNN(nn.Module):
 
     # Choose temporal encoder based on the configured model variant
     variant = m.get("variant", "crnn")
-    enc_type = "transformer" if variant == "conformer" else m.get("rnn", {}).get("type", "lstm")
+    enc_type = "transformer" if variant == "conformer" else m.get(
+        "rnn", {}).get("type", "lstm")
     self.enc_type = enc_type
     if enc_type == "lstm":
       rnn_h = int(m["rnn"].get("hidden", 128))

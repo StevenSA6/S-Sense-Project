@@ -4,9 +4,10 @@ import re
 import time
 import math
 from pathlib import Path
-from typing import Any, Dict, Tuple, cast
+from typing import Any, Dict, cast
 
 import torch
+import wandb
 from torch.utils.data import DataLoader, WeightedRandomSampler
 # fmt: off
 from torch.utils.tensorboard import SummaryWriter # pyright: ignore[reportPrivateImportUsage]
@@ -135,14 +136,20 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
       beta = cfg.training.class_balance.beta
       cfg.loss.sed.pos_weight = float(negf/posf * beta)
     if cfg.training.class_balance.sampler:
-      sampler = WeightedRandomSampler(torch.tensor(weights, dtype=torch.double),
-                                      num_samples=len(weights), replacement=True)
+      sampler = WeightedRandomSampler(weights,  # Sequence[float]
+                                      num_samples=len(weights),
+                                      replacement=True)
 
   train_dl = DataLoader(train_ds, batch_size=cfg.training.batch_size,
                         shuffle=(sampler is None), sampler=sampler,
                         num_workers=cfg.hardware.num_workers, pin_memory=True, collate_fn=collate_batch)
   val_dl = DataLoader(val_ds, batch_size=cfg.training.batch_size, shuffle=False,
                       num_workers=cfg.hardware.num_workers, pin_memory=True, collate_fn=collate_batch)
+
+  raw = OmegaConf.to_container(cfg, resolve=True)
+  if not isinstance(raw, dict):
+    raise TypeError("OmegaConf.to_container(cfg) did not return a dict")
+  cfg_dict: Dict[str, Any] = cast(Dict[str, Any], raw)
 
   # model + optim
   net = build_model(cast(Dict[str, Any], OmegaConf.to_container(
@@ -167,13 +174,12 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
                          ) if cfg.logging.tensorboard else None
   wandb_run = None
   if cfg.logging.wandb.enabled:
-    import wandb  # pyright: ignore[reportMissingImports]
     wandb_run = wandb.init(project=cfg.project_name,
                            entity=cfg.logging.wandb.entity,
                            name=f"{cfg.run_name}_fold{fold_id}",
                            dir=run_dir,
-                           config=OmegaConf.to_container(cfg, resolve=True))
-  scaler = torch.cuda.amp.GradScaler(enabled=(cfg.hardware.precision == 16))
+                           config=cfg_dict)
+  scaler = torch.GradScaler("cuda", enabled=(cfg.hardware.precision == 16))
   best = float(
       "-inf") if cfg.logging.checkpoints.mode == "max" else float("inf")
   patience = cfg.training.early_stop.patience if cfg.training.early_stop.enabled else 10
@@ -189,8 +195,8 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
       with torch.autocast("cuda", enabled=(cfg.hardware.precision == 16)):
         out = net(xb)
         logits = out["logits"]
-        assert isinstance(
-            cfg, Dict), f"cfg should be of type Dict, but got type {type(cfg)} instead"
+        # assert isinstance(
+        #     cfg, Dict), f"cfg should be of type Dict, but got type {type(cfg)} instead"
         loss = sed_loss(logits, yb, cfg.loss.sed) + \
             count_losses(out, cb, logits, train_ds.hop,
                          cfg.audio_io.model_sr, cfg)
@@ -257,14 +263,14 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
       if cfg.training.early_stop.enabled and bad >= patience:
         break
 
-    if writer:
-      writer.close()
-    if wandb_run:
-      wandb_run.finish()
-    # load best for evaluation caller
-    best_ckpt = os.path.join(run_dir, "best.ckpt")
-    # keep the in-memory model already at last epoch; optionally reload best:
-    if os.path.exists(best_ckpt):
-      state = torch.load(best_ckpt, map_location=device)
-      net.load_state_dict(state["model_state"])
-    return best_ckpt, net
+  if writer:
+    writer.close()
+  if wandb_run:
+    wandb_run.finish()
+  # load best for evaluation caller
+  best_ckpt = os.path.join(run_dir, "best.ckpt")
+  # keep the in-memory model already at last epoch; optionally reload best:
+  if os.path.exists(best_ckpt):
+    state = torch.load(best_ckpt, map_location=device)
+    net.load_state_dict(state["model_state"])
+  return best_ckpt, net

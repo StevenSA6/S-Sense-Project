@@ -175,7 +175,8 @@ def infer_path(
     if n_frames > 0:
       X_bn = X[:, :, :n_frames]
       W_bn, _ = window_into_chunks(X_bn, cfg.audio_io.model_sr, hop, wcfg)
-      recalibrate_batch_norm(model, W_bn, cfg.hardware.device, batch_size=batch_size)
+      recalibrate_batch_norm(
+          model, W_bn, cfg.hardware.device, batch_size=batch_size)
 
   # forward in batches
   device = cfg.hardware.device
