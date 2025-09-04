@@ -125,6 +125,9 @@ def infer_path(
     path: str,
     batch_size: int = 16,
 ) -> Dict:
+  if getattr(cfg, "baseline", None) and getattr(cfg.baseline, "enabled", False):
+    from baseline.detector import detect_path
+    return detect_path(path, cfg)
   model.eval()
   # load + DSP
   y, sr_raw = load_audio(path, expected_sr=None, mono=True)
