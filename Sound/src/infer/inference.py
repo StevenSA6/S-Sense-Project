@@ -7,6 +7,11 @@ from scipy.signal import medfilt
 from omegaconf import DictConfig
 from dataio.preprocess import load_audio, preprocess_waveform
 from dataio.features import FeatCfg, WindowCfg, extract_features, window_into_chunks
+from infer.adaptation import (
+    recalibrate_batch_norm,
+    instance_normalize,
+    calibrate_posteriors,
+)
 
 
 def smooth_posteriors(p: np.ndarray, k: int, mode: str) -> np.ndarray:
@@ -146,6 +151,11 @@ def infer_path(
       aux_enabled=False,  # no aux at inference unless you want it tiled
   )
   X, _, hop = extract_features(y_p, cfg.audio_io.model_sr, feat_cfg, aux=None)
+  # optional instance normalization
+  ad_cfg = getattr(cfg, "adaptation", {})
+  inst_cfg = getattr(ad_cfg, "instancenorm", {})
+  if inst_cfg.get("enabled", False):
+    X = instance_normalize(X)
   T_full = X.shape[-1]
 
   # windowing
@@ -156,6 +166,16 @@ def infer_path(
   if len(W) == 0:  # degenerate
     W = X[:, :, :1][None, ...]
     idxs = [(0, 1)]
+
+  # batch-norm adaptation using first N seconds
+  ada_cfg = getattr(ad_cfg, "adabn", {})
+  if ada_cfg.get("enabled", False):
+    secs = float(ada_cfg.get("recalibrate_secs", 0.0))
+    n_frames = int(round(secs * cfg.audio_io.model_sr / hop))
+    if n_frames > 0:
+      X_bn = X[:, :, :n_frames]
+      W_bn, _ = window_into_chunks(X_bn, cfg.audio_io.model_sr, hop, wcfg)
+      recalibrate_batch_norm(model, W_bn, cfg.hardware.device, batch_size=batch_size)
 
   # forward in batches
   device = cfg.hardware.device
@@ -168,6 +188,12 @@ def infer_path(
 
   # stitch
   p_full = stitch_over_windows(outs, idxs, T_total=T_full)
+
+  # optional posterior calibration
+  cal_cfg = getattr(ad_cfg, "calibration", {})
+  if cal_cfg.get("enabled", False):
+    topk = int(cal_cfg.get("swallows_for_tuning", 0))
+    p_full = calibrate_posteriors(p_full, topk)
 
   # optional HMM
   if cfg.inference.get("crf", {}).get("enabled", False):
