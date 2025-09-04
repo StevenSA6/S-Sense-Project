@@ -15,13 +15,13 @@ data:
   subject_id:
     mode: parent_dir
 
-cv:
+cv: # TODO: Try loso instead of kfold too
   enabled: true
   folds: 5
   split_by: subject # or "file" if subject labels aren't present
 
 hardware:
-  num_workers: 8
+  num_workers: 0
   device: cuda
   precision: 32 # 32|16|bf16
   deterministic: false
@@ -234,9 +234,6 @@ training:
   early_stop:
     enabled: true
     patience: 10
-  cv:
-    scheme: loso # loso|kfold|random
-    folds: 0 # if kfold>0 use that
   class_balance:
     sampler: false
     pos_weight_auto: true # override loss.sed.pos_weight using Nneg/Npos*beta
