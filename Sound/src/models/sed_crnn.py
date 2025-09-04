@@ -81,7 +81,9 @@ class CRNN(nn.Module):
         1, 1), bias=False)  # after collapsing F' via pooling
     self.freq_pool = nn.AdaptiveAvgPool2d((1, None))  # collapse freq
 
-    enc_type = m.get("rnn", {}).get("type", "lstm")
+    # Choose temporal encoder based on the configured model variant
+    variant = m.get("variant", "crnn")
+    enc_type = "transformer" if variant == "conformer" else m.get("rnn", {}).get("type", "lstm")
     self.enc_type = enc_type
     if enc_type == "lstm":
       rnn_h = int(m["rnn"].get("hidden", 128))
