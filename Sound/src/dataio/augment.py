@@ -7,7 +7,7 @@ import librosa
 from scipy.signal import fftconvolve
 from .preprocess import compressor, CompressorCfg, expander, ExpanderCfg, apply_param_eq, biquad_shelf
 from omegaconf import DictConfig
-from scipy.signal import lfilter
+from scipy.signal import lfilter, lfilter_zi
 
 
 def _rand(p: float) -> bool: return random.random() < p
@@ -55,6 +55,17 @@ def apply_ir(y: np.ndarray, ir_dir: Optional[str], wet_db: float = -12.0) -> np.
   return (y + wet*out).astype(np.float32)
 
 
+def _lfilter_blockwise(b, a, x, block=65536):
+  out = np.empty_like(x)
+  zi = lfilter_zi(b, a) * x[0]
+  i = 0
+  while i < len(x):
+    j = min(i + block, len(x))
+    out[i:j], zi = lfilter(b, a, x[i:j], zi=zi)
+    i = j
+  return out
+
+
 def eq_tilt(y: np.ndarray, sr: int, db_per_octave: float) -> np.ndarray:
   # implement as opposing low/high shelves around 1 kHz
   f0 = 1000.0
@@ -62,8 +73,8 @@ def eq_tilt(y: np.ndarray, sr: int, db_per_octave: float) -> np.ndarray:
   # low shelf +gain, high shelf -gain or vice versa
   B1, A1 = biquad_shelf(f0, gain, sr, high=False)
   B2, A2 = biquad_shelf(f0, -gain, sr, high=True)
-  tmp1 = lfilter(B1, A1, y)
-  tmp2 = lfilter(B2, A2, tmp1)
+  tmp1 = _lfilter_blockwise(B1, A1, y)
+  tmp2 = _lfilter_blockwise(B2, A2, tmp1)
   assert isinstance(
       tmp2, np.ndarray), f"tmp2 should be of type NDArray but got f{type(tmp2)} instead"
   return tmp2.astype(np.float32)
