@@ -122,9 +122,9 @@ def _standardize(M: np.ndarray, per_recording: bool, calibration_secs: float, cf
 
 
 def _safe_vec(v: np.ndarray) -> np.ndarray:
-  v = np.asarray(v, dtype=np.float32)
-  v = np.nan_to_num(v, nan=0.0, posinf=0.0, neginf=0.0)
-  return np.clip(v, -1e6, 1e6)
+  v = np.nan_to_num(v, nan=0.0, posinf=0.0, neginf=0.0)  # clean first
+  v = np.clip(v, -1e6, 1e6)  # clamp range
+  return v.astype(np.float32)  # cast last
 
 
 def _fit_to_T(v: np.ndarray, T: int) -> np.ndarray:
