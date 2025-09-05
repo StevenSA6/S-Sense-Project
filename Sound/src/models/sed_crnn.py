@@ -1,5 +1,6 @@
 from typing import Dict
 import math
+from omegaconf import DictConfig
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -63,7 +64,7 @@ class PosEnc(nn.Module):
 
 
 class CRNN(nn.Module):
-  def __init__(self, cfg: Dict):
+  def __init__(self, cfg: Dict | DictConfig):
     super().__init__()
     m = cfg["model"]
     in_ch = int(m.get("in_channels", 1))

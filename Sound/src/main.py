@@ -1,16 +1,18 @@
 from omegaconf import OmegaConf, DictConfig
 from train.loop import train_one_fold
 from train.tester import evaluate_fold
+from models import build_model
 
 
 def main():
   cfg = OmegaConf.load("configs/initial_config.yaml")
   assert isinstance(cfg, DictConfig)
   folds = cfg.cv.folds if cfg.cv.enabled else 1
+  net = build_model(cfg)
   for f in range(folds):
     print(f"=== Fold {f}/{folds} ===")
     if getattr(cfg, "baseline", None) and getattr(cfg.baseline, "enabled", False):
-      metrics = evaluate_fold(cfg, fold_id=f, model=None)
+      metrics = evaluate_fold(cfg, fold_id=f, model=net)
       print({f"fold{f}/{k}": v for k, v in metrics.items()})
     else:
       res = train_one_fold(cfg, fold_id=f)
