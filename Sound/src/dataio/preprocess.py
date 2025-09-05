@@ -268,20 +268,13 @@ def compressor(y: np.ndarray, sr: int, cfg: CompressorCfg) -> np.ndarray:
   return y * gain_lin
 
 
-def rms_envelope(y: np.ndarray, sr: int, win_ms: int, release_ms: int) -> np.ndarray:
-  win = max(1, int(sr * win_ms / 1000))
-  pad = win // 2
-  y2 = np.pad(y**2, (pad, pad), mode="reflect")
-  kernel = np.ones(win) / win
-  power = np.convolve(y2, kernel, mode="valid")
-  rms = np.sqrt(np.maximum(power, 1e-12))
-  rel = math.exp(-1.0 / (release_ms * 0.001 * sr))
-  out = np.zeros_like(rms)
-  v = 0.0
-  for i, r in enumerate(rms):
-    v = max(r, rel * v + (1 - rel) * r)
-    out[i] = v
-  return out
+def rms_envelope(y: np.ndarray, sr: int, win_ms: int, hop_ms: float) -> np.ndarray:
+  """Frame-rate RMS (no Python loops)."""
+  frame_length = max(1, int(round(sr * win_ms / 1000.0)))
+  hop = max(1, int(round(sr * hop_ms / 1000.0)))
+  rms = librosa.feature.rms(y=y, frame_length=frame_length,
+                            hop_length=hop, center=True)[0]
+  return rms.astype(np.float32)
 
 # ---------------- pipeline ----------------
 
@@ -336,9 +329,13 @@ def preprocess_waveform(y: np.ndarray, sr: int, cfg: DictConfig) -> Tuple[np.nda
                    float(cfg.preprocess.de_esser.attack_ms),
                    float(cfg.preprocess.de_esser.release_ms))
     elif step == "envelope_aux" and cfg.preprocess.get("envelope_aux", {}).get("enabled", True):
-      env = rms_envelope(y, sr, win_ms=int(cfg.preprocess.envelope_aux.rms_win_ms),
-                         release_ms=int(cfg.preprocess.envelope_aux.release_ms))
-      aux["envelope_rms"] = env
+        env = rms_envelope(
+            y,
+            sr,
+            win_ms=int(cfg.preprocess.envelope_aux.rms_win_ms),
+            hop_ms=float(cfg.features.hop_ms),   # <— use feature hop, not sample-by-sample
+        )
+        aux["envelope_rms"] = env
     elif step == "amplitude_guard":
       m = np.max(np.abs(y)) + 1e-12
       if m > 1.0:
