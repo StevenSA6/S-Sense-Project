@@ -103,7 +103,7 @@ features:
   win_ms: 25
   hop_ms: 10
   n_fft: 512
-  n_mels: 128
+  n_mels: 64
   fmin: 20
   fmax: 8000
   log_eps: 1.0e-6
@@ -111,7 +111,7 @@ features:
     enabled: false
     order: 2
   aux_channels:
-    enabled: true
+    enabled: false
     spectral_flux: true
     centroid: true
     zcr: true
@@ -230,7 +230,7 @@ scheduler:
 
 training:
   epochs: 80
-  batch_size: 32
+  batch_size: 1
   early_stop:
     enabled: true
     patience: 10
