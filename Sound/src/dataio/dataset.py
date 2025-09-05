@@ -118,8 +118,6 @@ class SwallowWindowDataset(Dataset):
     # --- compute ONCE per file ---
     y, sr_raw = load_audio(str(path), expected_sr=None, mono=True)
     y_p, aux = preprocess_waveform(y, sr_raw, self.cfg)     # per-file DSP
-    if self.train and self.cfg.augment.enabled:
-      y_p = augment_waveform(y_p, self.cfg.audio_io.model_sr, self.cfg)
 
     X, _, hop = extract_features(
         y_p, self.cfg.audio_io.model_sr, self.feat_cfg, aux=aux)
