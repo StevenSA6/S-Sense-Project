@@ -90,8 +90,9 @@ def butter_lp(y: np.ndarray, sr: int, cutoff: float, order: int = 4) -> np.ndarr
 def loudness_normalize(y: np.ndarray, sr: int, target_lufs: float) -> np.ndarray:
   meter = pyln.Meter(sr)
   loud = meter.integrated_loudness(y.astype(np.float64))
-  gain_db = target_lufs - loud
-  return y * safe_db_to_lin(gain_db)
+  # TODO: Look into this (Temp optimization)
+  gain_db = np.clip(target_lufs - loud, -20.0, 20.0)  # cap boost/cut
+  return y * (10.0 ** (gain_db / 20.0))
 
 
 def apply_hpss(y: np.ndarray, mask_power: float, keep: str,
@@ -221,6 +222,17 @@ def apply_param_eq(y: NDArray[np.floating], sr: int, bands: List[Dict]) -> NDArr
   return out
 
 
+def _sanitize_wave(y: np.ndarray, peak_clip: float = 1.0) -> np.ndarray:
+  y = np.asarray(y, np.float64)  # keep headroom
+  y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+  if y.size:
+    p = float(np.max(np.abs(y)))
+    if np.isfinite(p) and p > 0:
+      y = y / max(1.0, p / peak_clip)  # prevent huge peaks
+  y = np.clip(y, -peak_clip, peak_clip)
+  return y.astype(np.float32, copy=False)
+
+
 def spectral_gate(y: np.ndarray, sr: int, threshold_db: float = -40.0, freq_smoothing: float = 1.0) -> np.ndarray:
   n_fft = 1024
   hop = n_fft // 4
@@ -329,15 +341,17 @@ def preprocess_waveform(y: np.ndarray, sr: int, cfg: DictConfig) -> Tuple[np.nda
                    float(cfg.preprocess.de_esser.attack_ms),
                    float(cfg.preprocess.de_esser.release_ms))
     elif step == "envelope_aux" and cfg.preprocess.get("envelope_aux", {}).get("enabled", True):
-        env = rms_envelope(
-            y,
-            sr,
-            win_ms=int(cfg.preprocess.envelope_aux.rms_win_ms),
-            hop_ms=float(cfg.features.hop_ms),   # <— use feature hop, not sample-by-sample
-        )
-        aux["envelope_rms"] = env
+      env = rms_envelope(
+          y,
+          sr,
+          win_ms=int(cfg.preprocess.envelope_aux.rms_win_ms),
+          # <— use feature hop, not sample-by-sample
+          hop_ms=float(cfg.features.hop_ms),
+      )
+      aux["envelope_rms"] = env
     elif step == "amplitude_guard":
       m = np.max(np.abs(y)) + 1e-12
       if m > 1.0:
         y = y / m
+    y = _sanitize_wave(y)
   return y.astype(np.float32), aux
