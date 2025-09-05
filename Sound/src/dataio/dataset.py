@@ -2,11 +2,12 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, OrderedDict, Tuple, Any
 from pathlib import Path
 import librosa
 import soundfile as sf
 import csv
+import numpy as np
 
 import torch
 from torch.utils.data import Dataset
@@ -104,6 +105,48 @@ class SwallowWindowDataset(Dataset):
             (n_frames - self.frames_per_chunk) / step)
       for w in range(n_windows):
         self.index.append((i, w))
+    self._cache = OrderedDict()  # path -> (X, hop, y_frames, events)
+    self._cache_cap = int(getattr(self.cfg.data, "max_cached_files", 8))
+
+  def _get_preprocessed(self, path: Path, events_hint):
+    key = str(path)
+    if key in self._cache:               # hit
+      X, hop, y_frames, events = self._cache.pop(key)
+      self._cache[key] = (X, hop, y_frames, events)
+      return X, hop, y_frames, events
+
+    # --- compute ONCE per file ---
+    y, sr_raw = load_audio(str(path), expected_sr=None, mono=True)
+    y_p, aux = preprocess_waveform(y, sr_raw, self.cfg)     # per-file DSP
+    if self.train and self.cfg.augment.enabled:
+      y_p = augment_waveform(y_p, self.cfg.audio_io.model_sr, self.cfg)
+
+    X, _, hop = extract_features(
+        y_p, self.cfg.audio_io.model_sr, self.feat_cfg, aux=aux)
+
+    # labels (load if not supplied in manifest)
+    events = events_hint
+    if events is None:
+      audio_root = Path(self.cfg.paths.audio_dir)
+      ts_root = Path(self.cfg.paths.timestamps_dir)
+      rel = path.relative_to(audio_root).with_suffix(".csv")
+      events = load_events_csv(ts_root / rel)
+
+    weak = float(self.cfg.labels.get("weak_dur_sec", 0.4))
+    soft = int(self.cfg.labels.get("positive_dilation_frames", 0))
+    minf = int(round(self.cfg.labels.min_event_sec * self.cfg.audio_io.model_sr / hop)) \
+        if "min_event_sec" in self.cfg.labels else 0
+
+    y_frames = events_to_frame_targets(
+        events, T=X.shape[-1], sr=self.cfg.audio_io.model_sr, hop=hop,
+        weak_dur_s=weak, soft_dilate_frames=soft, min_event_frames=minf
+    ).astype(np.float32)
+
+    # LRU insert
+    self._cache[key] = (X, hop, y_frames, events)
+    if len(self._cache) > self._cache_cap:
+      self._cache.popitem(last=False)  # evict oldest
+    return X, hop, y_frames, events
 
   def __len__(self) -> int:
     return len(self.index)
@@ -113,25 +156,8 @@ class SwallowWindowDataset(Dataset):
     item = self.items[file_idx]
     path = Path(item["path"])
 
-    # Load and DSP preprocess to model_sr
-    y, sr_raw = load_audio(str(path), expected_sr=None, mono=True)
-    y_p, aux = preprocess_waveform(y, sr_raw, self.cfg)
-
-    if self.train and self.cfg.augment.enabled:
-      y_p = augment_waveform(y_p, self.cfg.audio_io.model_sr, self.cfg)
-
-    X, _, hop = extract_features(
-        y_p, self.cfg.audio_io.model_sr, self.feat_cfg, aux=aux)
-
-    if self.train and self.cfg.augment.enabled and \
-       random.random() < self.cfg.augment.prob.specaugment:
-      X[0] = specaugment(
-          X[0], self.cfg.audio_io.model_sr, hop,
-          self.cfg.augment.specaugment.time_mask_ms,
-          self.cfg.augment.specaugment.time_masks,
-          self.cfg.augment.specaugment.freq_mask_bins,
-          self.cfg.augment.specaugment.freq_masks,
-      )
+    # compute once per recording, reuse thereafter
+    X, hop, y_full, events = self._get_preprocessed(path, item.get("events"))
 
     W, idxs = window_into_chunks(
         X, self.cfg.audio_io.model_sr, hop, self.win_cfg)
@@ -142,40 +168,23 @@ class SwallowWindowDataset(Dataset):
     x = W[w_ord]
     t0, t1 = idxs[w_ord]
 
-    # Load labels from CSV if not pre-supplied
-    events = item.get("events")
-    if events is None:
-      audio_root = Path(self.cfg.paths.audio_dir)
-      ts_root = Path(self.cfg.paths.timestamps_dir)
-      rel = path.relative_to(audio_root).with_suffix(".csv")  # e.g. s1/xyz.csv
-      csv_path = ts_root / rel
-      events = load_events_csv(csv_path)
+    if self.train and self.cfg.augment.enabled and random.random() < self.cfg.augment.prob.specaugment:
+      x0 = specaugment(
+          x[0], self.cfg.audio_io.model_sr, hop,
+          self.cfg.augment.specaugment.time_mask_ms,
+          self.cfg.augment.specaugment.time_masks,
+          self.cfg.augment.specaugment.freq_mask_bins,
+          self.cfg.augment.specaugment.freq_masks,
+      )
+      x = np.concatenate([x0[None, ...], x[1:]], axis=0)
 
-    weak_dur = float(self.cfg.labels.get("weak_dur_sec", 0.4))
-    soft_band = int(self.cfg.labels.get("positive_dilation_frames", 0))
-    min_frames = int(round(self.cfg.labels.min_event_sec *
-                           self.cfg.audio_io.model_sr / hop)) if \
-        "min_event_sec" in self.cfg.labels else 0
-
-    y_frames_full = events_to_frame_targets(
-        events=events,
-        T=X.shape[-1],
-        sr=self.cfg.audio_io.model_sr,
-        hop=hop,
-        weak_dur_s=weak_dur,
-        soft_dilate_frames=soft_band,
-        min_event_frames=min_frames,
-    )
-    y_win = y_frames_full[t0:t1]
-
+    y_win = y_full[t0:t1]
     count_win = counts_from_events(
         events, [(t0, t1)], sr=self.cfg.audio_io.model_sr, hop=hop)[0]
 
-    return {
-        "x": torch.from_numpy(x),
-        "y": torch.from_numpy(y_win).float(),
-        "count": torch.tensor(count_win, dtype=torch.float32),
-    }
+    return {"x": torch.from_numpy(x),
+            "y": torch.from_numpy(y_win).float(),
+            "count": torch.tensor(float(count_win), dtype=torch.float32)}
 
 
 def _frame_params_ms(sr: int, win_ms: float, hop_ms: float) -> Tuple[int, int]:
