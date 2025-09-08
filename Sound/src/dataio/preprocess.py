@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 import soundfile as sf
 import librosa
 from omegaconf import DictConfig
-from scipy.signal import butter, filtfilt, lfilter
+from scipy.signal import butter, filtfilt, lfilter, sosfiltfilt
 import pyloudnorm as pyln
 import soxr
 
@@ -224,7 +224,8 @@ def preprocess_file(src_path: str,
 
   y, sr = load_audio(src_path, expected_sr=expected_sr, mono=mono)
   y, aux = preprocess_waveform(y, sr, cfg)
-  out_sr = cfg.audio_io.model_sr if "resample" in (getattr(cfg.preprocess, "pipeline", []) or []) else sr
+  out_sr = cfg.audio_io.model_sr if "resample" in (
+      getattr(cfg.preprocess, "pipeline", []) or []) else sr
 
   dst = Path(dst_folder)
   dst.mkdir(parents=True, exist_ok=True)
@@ -267,8 +268,8 @@ def preprocess_directory(src_folder: str,
   out_paths: List[str] = []
   for f in sorted(src.glob(pattern)):
     out_path, _, _ = preprocess_file(str(f), cfg, dst_folder,
-                                    expected_sr=expected_sr,
-                                    mono=mono)
+                                     expected_sr=expected_sr,
+                                     mono=mono)
     out_paths.append(out_path)
   return out_paths
 
@@ -322,24 +323,38 @@ def resample(y: np.ndarray, sr_in: int, sr_out: int) -> np.ndarray:
   return librosa.resample(y, orig_sr=sr_in, target_sr=sr_out, res_type="soxr_hq")
 
 
+def _norm_w(cutoff_hz: float, sr: int, margin: float = 0.98) -> float:
+  if not np.isfinite(cutoff_hz) or cutoff_hz <= 0:
+    raise ValueError("cutoff must be > 0 Hz")
+  nyq = 0.5 * sr
+  max_cut = margin * nyq
+  if cutoff_hz >= max_cut:
+    print(f"lowpass cutoff {cutoff_hz:.1f} ≥ {max_cut:.1f} (={margin}*Nyquist). "
+          f"Clamping to {max_cut:.1f} Hz.")
+    cutoff_hz = max_cut
+  return cutoff_hz / nyq
+
+
 def butter_hp(y: np.ndarray, sr: int, cutoff: float, order: int = 2) -> np.ndarray:
   """
   Removes low-frequency rumble below a cutoff. Useful for eliminating mic handling noise, breathing artifacts, or low-frequency body movement that can obscure swallow transients
   """
-  wn = _wn(cutoff / (0.5 * sr))
-  b, a = cast(Tuple[np.ndarray, np.ndarray], butter(
-      order, wn, btype="highpass", output="ba"))
-  return filtfilt(b, a, y)
+  y64 = np.asarray(y, dtype=np.float64)
+  wn = _norm_w(cutoff, sr)
+  sos = butter(order, wn, btype="highpass", output="sos")
+  # let SciPy choose padlen unless signal is tiny
+  return sosfiltfilt(sos, y64)
 
 
 def butter_lp(y: np.ndarray, sr: int, cutoff: float, order: int = 4) -> np.ndarray:
   """
   Removes high-frequency content above a cutoff. Useful for discarding hiss
   """
-  wn = _wn(cutoff / (0.5 * sr))
-  b, a = cast(Tuple[np.ndarray, np.ndarray], butter(
-      order, wn, btype="lowpass", output="ba"))
-  return filtfilt(b, a, y)
+  y64 = np.asarray(y, dtype=np.float64)
+  wn = _norm_w(cutoff, sr, margin=0.98)
+  sos = butter(order, wn, btype="lowpass", output="sos")
+  # let SciPy choose padlen unless signal is tiny
+  return sosfiltfilt(sos, y64)
 
 
 def loudness_normalize(y: np.ndarray, sr: int, target_lufs: float) -> np.ndarray:

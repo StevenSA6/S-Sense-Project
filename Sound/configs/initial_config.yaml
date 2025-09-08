@@ -87,7 +87,7 @@ preprocess: # DSP before features
     - dc_block
     - resample
     - highpass
-    # - lowpass
+    - lowpass
     - loudness_norm
     - hpss
     - spectral_gate
