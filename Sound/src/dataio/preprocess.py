@@ -224,7 +224,7 @@ def preprocess_file(src_path: str,
 
   y, sr = load_audio(src_path, expected_sr=expected_sr, mono=mono)
   y, aux = preprocess_waveform(y, sr, cfg)
-  out_sr = cfg.audio_io.model_sr if "resample" in getattr(cfg.preprocess, "pipeline", []) else sr
+  out_sr = cfg.audio_io.model_sr if "resample" in (getattr(cfg.preprocess, "pipeline", []) or []) else sr
 
   dst = Path(dst_folder)
   dst.mkdir(parents=True, exist_ok=True)
@@ -420,7 +420,7 @@ def preprocess_waveform(y: np.ndarray, sr: int, cfg: DictConfig) -> Tuple[np.nda
   if not getattr(cfg.preprocess, "enabled", True):
     return y.astype(np.float32), {}
   aux: Dict[str, np.ndarray] = {}
-  for step in cfg.preprocess.pipeline:
+  for step in (cfg.preprocess.pipeline or []):
     if step == "dc_block" and cfg.preprocess.get("dc_block", {}).get("enabled", False):
       y = dc_block(y, alpha=0.995)
     elif step == "resample" and sr != cfg.audio_io.model_sr:
