@@ -84,19 +84,19 @@ preprocess: # DSP before features
     attack_ms: 5
     release_ms: 80
   pipeline:
-    # - dc_block
-    # - resample
-    # - highpass
+    - dc_block
+    - resample
+    - highpass
     # - lowpass
-    # - loudness_norm
-    # - hpss
-    # - spectral_gate
-    # - param_eq
-    # - expander
-    # - compressor
-    # - de_esser
-    # - envelope_aux
-    # - amplitude_guard
+    - loudness_norm
+    - hpss
+    - spectral_gate
+    - param_eq
+    - expander
+    - compressor
+    - de_esser
+    - envelope_aux
+    - amplitude_guard
 
 features:
   type: mel
