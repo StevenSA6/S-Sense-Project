@@ -1,6 +1,7 @@
 import math
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, cast
+from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
@@ -190,6 +191,86 @@ def load_audio(path: str,
 
 def save_audio(path: str, y: np.ndarray, sr: int):
   sf.write(path, y, sr, subtype="PCM_16")
+
+
+def preprocess_file(src_path: str,
+                    cfg: DictConfig,
+                    dst_folder: str,
+                    *,
+                    expected_sr: Optional[int] = None,
+                    mono: bool = True) -> Tuple[str, np.ndarray, Dict[str, np.ndarray]]:
+  """Preprocess an audio file and save the result.
+
+  Parameters
+  ----------
+  src_path:
+      Path to the input audio file.
+  cfg:
+      Configuration used by :func:`preprocess_waveform`.
+  dst_folder:
+      Directory where the processed audio will be written.
+  expected_sr:
+      If provided, input audio is resampled to this rate before processing.
+  mono:
+      Whether to mix input to mono before processing.
+
+  Returns
+  -------
+  tuple
+      ``(output_path, waveform, aux)`` where ``output_path`` is the path of the
+      written file, ``waveform`` is the processed audio array and ``aux`` is the
+      dictionary of auxiliary data returned by :func:`preprocess_waveform`.
+  """
+
+  y, sr = load_audio(src_path, expected_sr=expected_sr, mono=mono)
+  y, aux = preprocess_waveform(y, sr, cfg)
+  out_sr = cfg.audio_io.model_sr if "resample" in getattr(cfg.preprocess, "pipeline", []) else sr
+
+  dst = Path(dst_folder)
+  dst.mkdir(parents=True, exist_ok=True)
+  out_path = dst / Path(src_path).name
+  save_audio(str(out_path), y, out_sr)
+  return str(out_path), y, aux
+
+
+def preprocess_directory(src_folder: str,
+                         cfg: DictConfig,
+                         dst_folder: str,
+                         *,
+                         expected_sr: Optional[int] = None,
+                         mono: bool = True,
+                         pattern: str = "*.wav") -> List[str]:
+  """Preprocess all audio files in a folder.
+
+  Parameters
+  ----------
+  src_folder:
+      Directory containing input audio files.
+  cfg:
+      Configuration passed to :func:`preprocess_waveform`.
+  dst_folder:
+      Directory where processed audio will be written.
+  expected_sr:
+      If provided, inputs are resampled to this rate before processing.
+  mono:
+      Whether to mix inputs to mono before processing.
+  pattern:
+      Glob pattern for selecting files relative to ``src_folder``.
+
+  Returns
+  -------
+  list
+      Paths to the written files.
+  """
+
+  src = Path(src_folder)
+  out_paths: List[str] = []
+  for f in sorted(src.glob(pattern)):
+    out_path, _, _ = preprocess_file(str(f), cfg, dst_folder,
+                                    expected_sr=expected_sr,
+                                    mono=mono)
+    out_paths.append(out_path)
+  return out_paths
 
 
 def pcm_to_float32(y: np.ndarray) -> np.ndarray:
