@@ -15,8 +15,8 @@ from torch.utils.tensorboard import SummaryWriter # pyright: ignore[reportPrivat
 from omegaconf import DictConfig, OmegaConf
 
 from dataio.dataset import SwallowWindowDataset, DatasetConfig, collate_batch, load_events_csv, _estimate_frames
-from dataio.discovery import scan_audio_dir
-from dataio.splits import make_folds
+from dataio.utils import scan_audio_dir
+from train.utils import make_folds
 from models import build_model, infer_in_channels
 from models.losses import sed_loss, count_losses
 

@@ -5,8 +5,8 @@ from typing import Dict, List, Tuple, Any
 
 import torch
 from omegaconf import DictConfig
-from dataio.discovery import scan_audio_dir
-from dataio.splits import make_folds
+from dataio.utils import scan_audio_dir
+from train.utils import make_folds
 from infer.inference import infer_path
 from infer.eval_metrics import event_f1_sed_eval, count_mae_mape, onset_mae
 
