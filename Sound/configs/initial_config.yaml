@@ -299,15 +299,3 @@ logging:
   save_last: true
   save_best: true
   top_k: 3
-
-baseline: # classical non-ML detector
-  enabled: false
-  features:
-    spectral_flux: true
-    percussive_energy: true
-    highband_energy: false
-    crest_factor: true
-  detector:
-    peak_prominence: 1.5
-    min_gap_sec: 0.6
-    hysteresis: [0.6, 0.4]
