@@ -28,11 +28,59 @@ class FeatCfg:
   calibration_secs: float = 10.0
 
 
-@dataclass
-class WindowCfg:
-  chunk_sec: float = 2.0
-  overlap: float = 0.5  # 50%
-  pad_mode: str = "reflect"  # for waveform padding before STFT if needed
+def extract_features(
+    y: np.ndarray,
+    sr: int,
+    cfg: FeatCfg,
+    aux: Optional[Dict[str, np.ndarray]] = None
+) -> Tuple[np.ndarray, int, int]:
+  """
+  Returns X of shape (C, F, T), where F depends on feature type
+  (e.g. n_mels for mel). C=1(+deltas)+aux_channels.
+  """
+  assert sr == cfg.sr, f"Expected sr={cfg.sr}, got {sr}"
+  mag, _, hop = _stft_mag(y, cfg)
+
+  if cfg.type == "mel":
+    feat = _mel_log(mag, cfg)
+  elif cfg.type == "spec":
+    feat = np.log(mag + cfg.log_eps).astype(np.float32)
+  else:
+    raise ValueError(f"Unsupported feature type: {cfg.type}")
+
+  if cfg.standardize:
+    feat = _standardize(feat, cfg.standardize_per_recording,
+                        cfg.calibration_secs, cfg)
+
+  if cfg.deltas_enabled:
+    base = _delta_stack(feat, cfg.deltas_order)
+  else:
+    base = feat[None, ...]
+
+  T = feat.shape[1]
+  chans: List[np.ndarray] = [base]
+
+  if cfg.aux_enabled:
+    aux_list = []
+    if cfg.aux_flux:
+      aux_list.append(_spectral_flux(mag))
+    if cfg.aux_centroid:
+      aux_list.append(_spectral_centroid(mag, cfg.sr, cfg.n_fft))
+    if cfg.aux_zcr:
+      aux_list.append(_zcr(y, cfg, T))
+    if cfg.aux_perc_mask_mean:
+      aux_list.append(_perc_mask_mean(mag))
+    if cfg.aux_env_rms and aux is not None and "envelope_rms" in aux:
+      aux_list.append(_align_env_to_frames(aux["envelope_rms"], hop, T))
+
+    if aux_list:
+      aux_list = [_fit_to_T(v, T) for v in aux_list]
+      A = np.stack(aux_list, axis=0)
+      A_tiled = np.repeat(A[:, None, :], feat.shape[0], axis=1)
+      chans.append(A_tiled.astype(np.float32))
+
+  X = np.concatenate(chans, axis=0).astype(np.float32)
+  return X, feat.shape[0], hop
 
 
 def _frame_params(cfg: FeatCfg) -> Tuple[int, int]:
@@ -132,94 +180,3 @@ def _fit_to_T(v: np.ndarray, T: int) -> np.ndarray:
   if v.shape[0] != T:
     v = librosa.util.fix_length(v, size=T)
   return v
-
-
-def extract_features(
-    y: np.ndarray,
-    sr: int,
-    cfg: FeatCfg,
-    aux: Optional[Dict[str, np.ndarray]] = None
-) -> Tuple[np.ndarray, int, int]:
-  """
-  Returns X of shape (C, F, T), where F depends on feature type
-  (e.g. n_mels for mel). C=1(+deltas)+aux_channels.
-  """
-  assert sr == cfg.sr, f"Expected sr={cfg.sr}, got {sr}"
-  mag, _, hop = _stft_mag(y, cfg)
-
-  if cfg.type == "mel":
-    feat = _mel_log(mag, cfg)
-  elif cfg.type == "spec":
-    feat = np.log(mag + cfg.log_eps).astype(np.float32)
-  else:
-    raise ValueError(f"Unsupported feature type: {cfg.type}")
-
-  if cfg.standardize:
-    feat = _standardize(feat, cfg.standardize_per_recording,
-                        cfg.calibration_secs, cfg)
-
-  if cfg.deltas_enabled:
-    base = _delta_stack(feat, cfg.deltas_order)
-  else:
-    base = feat[None, ...]
-
-  T = feat.shape[1]
-  chans: List[np.ndarray] = [base]
-
-  if cfg.aux_enabled:
-    aux_list = []
-    if cfg.aux_flux:
-      aux_list.append(_spectral_flux(mag))
-    if cfg.aux_centroid:
-      aux_list.append(_spectral_centroid(mag, cfg.sr, cfg.n_fft))
-    if cfg.aux_zcr:
-      aux_list.append(_zcr(y, cfg, T))
-    if cfg.aux_perc_mask_mean:
-      aux_list.append(_perc_mask_mean(mag))
-    if cfg.aux_env_rms and aux is not None and "envelope_rms" in aux:
-      aux_list.append(_align_env_to_frames(aux["envelope_rms"], hop, T))
-
-    if aux_list:
-      aux_list = [_fit_to_T(v, T) for v in aux_list]
-      A = np.stack(aux_list, axis=0)
-      A_tiled = np.repeat(A[:, None, :], feat.shape[0], axis=1)
-      chans.append(A_tiled.astype(np.float32))
-
-  X = np.concatenate(chans, axis=0).astype(np.float32)
-  return X, feat.shape[0], hop
-
-
-def window_into_chunks(
-    X: np.ndarray,     # (C,F,T)
-    sr: int,
-    hop: int,
-    wcfg: WindowCfg
-) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
-  """
-  Chunk along time dimension with 50% overlap.
-  Returns windows W of shape (N, C, F, Tw) and [(t0,t1) frame indices].
-  """
-  C, F, T = X.shape
-  frames_per_chunk = int(round(wcfg.chunk_sec * sr / hop))
-  step = max(1, int(round(frames_per_chunk * (1.0 - wcfg.overlap))))
-  if frames_per_chunk <= 0:
-    raise ValueError("frames_per_chunk <= 0")
-
-  # pad reflect to cover last partial window
-  pad = (0, 0)
-  need = (((T - frames_per_chunk) % step) != 0)
-  if need:
-    remainder = (T - frames_per_chunk) % step
-    pad_frames = step - remainder
-    X = np.pad(X, ((0, 0), (0, 0), (0, pad_frames)), mode="reflect")
-    T = X.shape[2]
-
-  windows = []
-  idxs: List[Tuple[int, int]] = []
-  for t0 in range(0, T - frames_per_chunk + 1, step):
-    t1 = t0 + frames_per_chunk
-    windows.append(X[:, :, t0:t1])
-    idxs.append((t0, t1))
-  W = np.stack(windows, axis=0) if windows else np.empty(
-      (0, C, F, frames_per_chunk), dtype=X.dtype)
-  return W.astype(np.float32), idxs

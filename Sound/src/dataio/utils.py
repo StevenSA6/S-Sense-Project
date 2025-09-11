@@ -1,4 +1,5 @@
-from typing import Tuple, Optional
+from dataclasses import dataclass
+from typing import List, Tuple, Optional
 
 import numpy as np
 import soundfile as sf
@@ -41,6 +42,49 @@ def scan_audio_dir(audio_dir: str, timestamps_dir: str) -> list[dict]:
     events = load_events_csv(csv_path) if csv_path.exists() else []
     items.append({"path": str(p), "subject": subj, "events": events})
   return items
+
+
+@dataclass
+class WindowCfg:
+  chunk_sec: float = 2.0
+  overlap: float = 0.5  # 50%
+  pad_mode: str = "reflect"  # for waveform padding before STFT if needed
+
+
+def window_into_chunks(
+    X: np.ndarray,     # (C,F,T)
+    sr: int,
+    hop: int,
+    wcfg: WindowCfg
+) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+  """
+  Chunk along time dimension with 50% overlap.
+  Returns windows W of shape (N, C, F, Tw) and [(t0,t1) frame indices].
+  """
+  C, F, T = X.shape
+  frames_per_chunk = int(round(wcfg.chunk_sec * sr / hop))
+  step = max(1, int(round(frames_per_chunk * (1.0 - wcfg.overlap))))
+  if frames_per_chunk <= 0:
+    raise ValueError("frames_per_chunk <= 0")
+
+  # pad reflect to cover last partial window
+  pad = (0, 0)
+  need = (((T - frames_per_chunk) % step) != 0)
+  if need:
+    remainder = (T - frames_per_chunk) % step
+    pad_frames = step - remainder
+    X = np.pad(X, ((0, 0), (0, 0), (0, pad_frames)), mode="reflect")
+    T = X.shape[2]
+
+  windows = []
+  idxs: List[Tuple[int, int]] = []
+  for t0 in range(0, T - frames_per_chunk + 1, step):
+    t1 = t0 + frames_per_chunk
+    windows.append(X[:, :, t0:t1])
+    idxs.append((t0, t1))
+  W = np.stack(windows, axis=0) if windows else np.empty(
+      (0, C, F, frames_per_chunk), dtype=X.dtype)
+  return W.astype(np.float32), idxs
 
 
 # ---------------- Helpers ----------------

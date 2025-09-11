@@ -14,7 +14,8 @@ from torch.utils.data import Dataset
 
 from omegaconf import DictConfig
 from .preprocess import load_audio, preprocess_waveform
-from .features import FeatCfg, WindowCfg, extract_features, window_into_chunks
+from .features import FeatCfg, extract_features
+from dataio.utils import WindowCfg, window_into_chunks
 from .augment import augment_waveform, specaugment
 from dataio.targets import events_to_frame_targets, counts_from_events
 
@@ -185,6 +186,13 @@ class SwallowWindowDataset(Dataset):
             "count": torch.tensor(float(count_win), dtype=torch.float32)}
 
 
+def collate_batch(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+  xs = torch.stack([b["x"] for b in batch], dim=0)
+  ys = torch.stack([b["y"] for b in batch], dim=0)
+  cnt = torch.stack([b["count"] for b in batch], dim=0)
+  return {"x": xs, "y": ys, "count": cnt}
+
+
 def _frame_params_ms(sr: int, win_ms: float, hop_ms: float) -> Tuple[int, int]:
   win = int(round(sr * win_ms / 1000.0))
   hop = int(round(sr * hop_ms / 1000.0))
@@ -202,10 +210,3 @@ def _estimate_frames(path: str, target_sr: int, win: int, hop: int) -> int:
   n_resamp = int(round(duration_s * target_sr))
   T = 1 + int(math.floor((n_resamp + hop // 2) / hop))
   return T
-
-
-def collate_batch(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
-  xs = torch.stack([b["x"] for b in batch], dim=0)
-  ys = torch.stack([b["y"] for b in batch], dim=0)
-  cnt = torch.stack([b["count"] for b in batch], dim=0)
-  return {"x": xs, "y": ys, "count": cnt}

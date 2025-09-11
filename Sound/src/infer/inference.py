@@ -6,7 +6,8 @@ from scipy.signal import medfilt
 
 from omegaconf import DictConfig
 from dataio.preprocess import load_audio, preprocess_waveform
-from dataio.features import FeatCfg, WindowCfg, extract_features, window_into_chunks
+from dataio.features import FeatCfg, extract_features
+from dataio.utils import WindowCfg, window_into_chunks
 from infer.adaptation import (
     recalibrate_batch_norm,
     instance_normalize,
