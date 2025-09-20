@@ -6,7 +6,6 @@ from typing import Dict, List, OrderedDict, Tuple, Any
 from pathlib import Path
 import librosa
 import soundfile as sf
-import csv
 import numpy as np
 
 import torch
@@ -15,8 +14,8 @@ from torch.utils.data import Dataset
 from omegaconf import DictConfig
 from .preprocess import load_audio, preprocess_waveform
 from .features import FeatCfg, extract_features
-from dataio.utils import WindowCfg, window_into_chunks
-from .augment import augment_waveform, specaugment
+from dataio.utils import WindowCfg, window_into_chunks, load_events_csv
+from .augment import specaugment
 from dataio.targets import events_to_frame_targets, counts_from_events
 
 
@@ -24,22 +23,6 @@ from dataio.targets import events_to_frame_targets, counts_from_events
 class DatasetConfig:
   cfg: DictConfig
   train: bool
-
-
-def load_events_csv(csv_path: Path) -> List[Dict[str, float]]:
-  """Read timestamps CSV into a list of events with onset/offset."""
-  if not csv_path.exists():
-    return []
-  events = []
-  with csv_path.open("r", newline="", encoding="utf-8") as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-      s = float(row["start"])
-      e = float(row.get("end", s))
-      if e < s:
-        e = s
-      events.append({"onset": s, "offset": e})
-  return events
 
 
 class SwallowWindowDataset(Dataset):

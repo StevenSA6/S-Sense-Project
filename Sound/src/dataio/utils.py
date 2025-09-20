@@ -1,12 +1,28 @@
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
+import csv
 import numpy as np
 import soundfile as sf
 import librosa
 import soxr
 from pathlib import Path
-from dataio.dataset import load_events_csv
+
+
+def load_events_csv(csv_path: Path) -> List[Dict[str, float]]:
+  """Read timestamps CSV into a list of events with onset/offset."""
+  if not csv_path.exists():
+    return []
+  events = []
+  with csv_path.open("r", newline="", encoding="utf-8") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+      s = float(row["start"])
+      e = float(row.get("end", s))
+      if e < s:
+        e = s
+      events.append({"onset": s, "offset": e})
+  return events
 
 
 def load_audio(path: str,
