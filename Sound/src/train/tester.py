@@ -30,18 +30,29 @@ def _refs_for(items: List[Dict[str, Any]],
               audio_dir: str,
               timestamps_dir: str) -> Dict[str, List[Dict[str, float]]]:
   refs: Dict[str, List[Dict[str, float]]] = {}
-  audio_root = Path(audio_dir).resolve()
+  audio_root = Path(audio_dir)
+  audio_root_abs = audio_root.resolve()
   ts_root = Path(timestamps_dir)
   for it in items:
-    wav = Path(it["path"]).resolve()
-    try:
-      rel = wav.relative_to(audio_root).with_suffix(".csv")
-    except ValueError:
-      rel = Path(wav.name).with_suffix(".csv")
+    wav = Path(it["path"])
+    key = str(wav)
+
+    rel: Path
+    if wav.is_absolute():
+      try:
+        rel = wav.resolve().relative_to(audio_root_abs)
+      except ValueError:
+        rel = Path(wav.name)
+    else:
+      try:
+        rel = wav.relative_to(audio_root)
+      except ValueError:
+        rel = Path(wav.name)
+    rel = rel.with_suffix(".csv")
     events = it.get("events")
     if events is None:
       events = _load_events_csv(ts_root / rel)
-    refs[str(wav)] = events
+    refs[key] = events
   return refs
 
 
