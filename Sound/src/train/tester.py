@@ -26,11 +26,22 @@ def _load_events_csv(csv_path: Path) -> List[Dict[str, float]]:
   return ev
 
 
-def _refs_for(items: List[Dict[str, Any]], timestamps_dir: str) -> Dict[str, List[Dict[str, float]]]:
+def _refs_for(items: List[Dict[str, Any]],
+              audio_dir: str,
+              timestamps_dir: str) -> Dict[str, List[Dict[str, float]]]:
   refs: Dict[str, List[Dict[str, float]]] = {}
+  audio_root = Path(audio_dir).resolve()
+  ts_root = Path(timestamps_dir)
   for it in items:
-    wav = Path(it["path"])
-    refs[str(wav)] = _load_events_csv(Path(timestamps_dir) / f"{wav.stem}.csv")
+    wav = Path(it["path"]).resolve()
+    try:
+      rel = wav.relative_to(audio_root).with_suffix(".csv")
+    except ValueError:
+      rel = Path(wav.name).with_suffix(".csv")
+    events = it.get("events")
+    if events is None:
+      events = _load_events_csv(ts_root / rel)
+    refs[str(wav)] = events
   return refs
 
 
@@ -50,7 +61,8 @@ def evaluate_fold(cfg: DictConfig, fold_id: int, model: torch.nn.Module) -> Dict
     preds_by_file[it["path"]] = (r["onsets_s"], r["offsets_s"])
 
   # refs
-  refs_by_file = _refs_for(val_items, cfg.paths.timestamps_dir)
+  refs_by_file = _refs_for(
+      val_items, cfg.paths.audio_dir, cfg.paths.timestamps_dir)
 
   # metrics
   tol_cfg = cfg.evaluation.tolerances
