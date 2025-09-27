@@ -1,0 +1,305 @@
+seed: 42
+project_name: swallow_count
+run_name: default
+paths:
+  data_root: ./data
+  audio_dir: data/audio
+  timestamps_dir: data/timestamps
+  train_manifest: ./manifests/train.jsonl
+  val_manifest: ./manifests/val.jsonl
+  test_manifest: ./manifests/test.jsonl
+  out_dir: ./outputs
+data:
+  subject_id:
+    mode: parent_dir
+cv:
+  enabled: true
+  folds: 5
+  split_by: subject
+hardware:
+  num_workers: 0
+  device: cuda
+  precision: 32
+  deterministic: false
+audio_io:
+  in_sr: 48000
+  model_sr: 16000
+  mono: true
+  keep_archive_48k: true
+preprocess:
+  enabled: true
+  dc_block:
+    enabled: true
+  highpass:
+    enabled: true
+    cutoff_hz: 30
+    order: 2
+  lowpass:
+    enabled: true
+    cutoff_hz: 9000
+    order: 4
+  loudness_norm:
+    enabled: false
+    target_lufs: -23
+  hpss:
+    enabled: false
+    mask_power: 1.0
+    keep: percussive
+    percussive_gain_db: 0.0
+    harmonic_gain_db: 0.0
+  spectral_gate:
+    enabled: false
+    threshold_db: -40
+    freq_smoothing: 1.0
+  compressor:
+    enabled: false
+    threshold_db: -24
+    ratio: 2.0
+    attack_ms: 5
+    release_ms: 80
+    makeup_db: 0.0
+  envelope_aux:
+    enabled: true
+    rms_win_ms: 20
+    release_ms: 80
+  param_eq:
+    enabled: false
+    bands: []
+  de_esser:
+    enabled: false
+    band_hz:
+    - 4000
+    - 9000
+    threshold_db: -30
+    ratio: 4.0
+    attack_ms: 3
+    release_ms: 60
+  expander:
+    enabled: false
+    threshold_db: -45
+    ratio: 2.0
+    attack_ms: 5
+    release_ms: 80
+  pipeline:
+  - dc_block
+  - resample
+  - highpass
+  - lowpass
+  - loudness_norm
+  - hpss
+  - spectral_gate
+  - param_eq
+  - expander
+  - compressor
+  - de_esser
+  - envelope_aux
+  - amplitude_guard
+features:
+  type: mel
+  win_ms: 25
+  hop_ms: 10
+  n_fft: 512
+  n_mels: 64
+  fmin: 20
+  fmax: 8000
+  log_eps: 1.0e-06
+  deltas:
+    enabled: false
+    order: 2
+  aux_channels:
+    enabled: false
+    spectral_flux: true
+    centroid: true
+    zcr: true
+    percussive_mask_mean: true
+    envelope_rms: true
+  standardize:
+    enabled: true
+    per_recording: true
+    calibration_secs: 10
+windowing:
+  chunk_sec: 2.0
+  overlap: 0.5
+  pad_mode: reflect
+augment:
+  enabled: true
+  prob:
+    add_noise: 0.8
+    time_stretch: 0.3
+    pitch_shift: 0.3
+    specaugment: 0.7
+    eq_tilt: 0.5
+    dynamic_range: 0.5
+    room_ir: 0.3
+    hpss_mix: 0.5
+    dry_food_sim: 0.3
+  add_noise:
+    snr_db_min: 5
+    snr_db_max: 25
+    noise_bank: ./noise/bank
+  time_stretch:
+    min: 0.9
+    max: 1.1
+  pitch_shift:
+    semitones_min: -0.5
+    semitones_max: 0.5
+  specaugment:
+    time_mask_ms: 120
+    time_masks: 2
+    freq_mask_bins: 16
+    freq_masks: 2
+  eq_tilt:
+    db_per_octave_min: -3.0
+    db_per_octave_max: 3.0
+  dynamic_range:
+    mode: random
+    threshold_db: -24
+    ratio_min: 0.5
+    ratio_max: 4.0
+  room_ir:
+    ir_dir: ./irs/small_rooms
+    wet_db: -12
+  hpss_mix:
+    percussive_weight_min: 0.0
+    percussive_weight_max: 0.5
+  dry_food_sim:
+    attenuate_db_min: -8
+    attenuate_db_max: -3
+    duration_scale_min: 0.7
+    duration_scale_max: 0.9
+labels:
+  type: strong
+  positive_dilation_frames: 2
+  min_event_sec: 0.12
+model:
+  variant: crnn
+  in_channels: 1
+  hidden: 256
+  dropout: 0.2
+  norm: batch
+  se_blocks: true
+  rnn:
+    type: lstm
+    layers: 2
+    bidirectional: true
+    hidden: 128
+  transformer:
+    layers: 2
+    nhead: 4
+    dim_ff: 512
+    conv_module: true
+  heads:
+    sed:
+      enabled: true
+      activation: sigmoid
+    count:
+      enabled: false
+      dist: poisson
+      loss_weight: 0.2
+  in_ch: 1
+loss:
+  sed:
+    type: focal
+    pos_weight: 0.5232558139534884
+    focal_gamma: 2.0
+    focal_alpha: 0.25
+    dice_weight: 0.5
+  count_consistency:
+    enabled: false
+    weight: 0.1
+  l2_weight_decay: 0.0001
+optimizer:
+  type: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  betas:
+  - 0.9
+  - 0.999
+  grad_clip_norm: 1.0
+scheduler:
+  type: cosine
+  warmup_epochs: 5
+  min_lr: 1.0e-05
+training:
+  epochs: 80
+  batch_size: 1
+  early_stop:
+    enabled: true
+    patience: 10
+  class_balance:
+    sampler: false
+    pos_weight_auto: true
+    beta: 0.5
+ssl:
+  enabled: false
+  approach: msm
+  epochs: 150
+  proj_dim: 256
+  freeze_bottom_blocks: 1
+  ft_epochs: 50
+  pseudo_labeling:
+    enabled: true
+    confidence_thr: 0.9
+    max_ratio: 0.3
+adaptation:
+  adabn:
+    enabled: true
+    recalibrate_secs: 60
+  instancenorm:
+    enabled: false
+  calibration:
+    enabled: true
+    swallows_for_tuning: 2
+inference:
+  smoothing:
+    type: median
+    k_frames: 7
+  hysteresis:
+    th_on: 0.6
+    th_off: 0.4
+  constraints:
+    min_event_sec: 0.12
+    min_gap_sec: 0.5
+  crf:
+    enabled: false
+    transition:
+    - - 0.0
+      - -2.0
+    - - -2.0
+      - 0.0
+evaluation:
+  metrics:
+    event_f1: true
+    onset_mae: true
+    count_mae: true
+  tolerances:
+    onset_ms: 200
+    offset_ms: 200
+  sed_eval_protocol: psds1
+logging:
+  run_naming: '{project_name}_{run_name}_{time}'
+  wandb:
+    enabled: false
+    entity: null
+  tensorboard: true
+  checkpoints:
+    save_top_k: 3
+    monitor: val/event_f1
+    mode: max
+  save_every_epoch: true
+  save_last: true
+  save_best: true
+  top_k: 3
+baseline:
+  enabled: false
+  features:
+    spectral_flux: true
+    percussive_energy: true
+    highband_energy: false
+    crest_factor: true
+  detector:
+    peak_prominence: 1.5
+    min_gap_sec: 0.6
+    hysteresis:
+    - 0.6
+    - 0.4
