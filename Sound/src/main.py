@@ -5,7 +5,7 @@ from models import build_model
 
 
 def main():
-  cfg = OmegaConf.load("configs/initial_config.yaml")
+  cfg = OmegaConf.load("configs/minimal_config.yaml")
   assert isinstance(cfg, DictConfig)
   folds = cfg.cv.folds if cfg.cv.enabled else 1
   net = build_model(cfg)
