@@ -1,0 +1,195 @@
+seed: 42
+project_name: swallow_count
+run_name: minimal
+
+paths:
+  data_root: ./data
+  audio_dir: data/audio
+  timestamps_dir: data/timestamps
+  train_manifest: ./manifests/train.jsonl
+  val_manifest: ./manifests/val.jsonl
+  test_manifest: ./manifests/test.jsonl
+  out_dir: ./outputs
+
+cv:
+  enabled: true
+  folds: 5
+  split_by: subject
+
+hardware:
+  num_workers: 0
+  device: cuda
+  precision: 32
+  deterministic: false
+
+audio_io:
+  in_sr: 48000
+  model_sr: 16000
+  mono: true
+  keep_archive_48k: false
+
+preprocess:
+  enabled: true
+  dc_block:
+    enabled: true
+  highpass:
+    enabled: true
+    cutoff_hz: 30
+    order: 2
+  lowpass:
+    enabled: false
+    cutoff_hz: 8000
+    order: 2
+  envelope_aux:
+    enabled: true
+    rms_win_ms: 20
+    release_ms: 80
+  pipeline:
+    - dc_block
+    - resample
+    - highpass
+    - envelope_aux
+    - amplitude_guard
+
+features:
+  type: mel
+  win_ms: 25
+  hop_ms: 10
+  n_fft: 512
+  n_mels: 64
+  fmin: 20
+  fmax: 8000
+  log_eps: 1.0e-6
+  deltas:
+    enabled: false
+    order: 2
+  aux_channels:
+    enabled: false
+    spectral_flux: false
+    centroid: false
+    zcr: false
+    percussive_mask_mean: false
+    envelope_rms: false
+  standardize:
+    enabled: true
+    per_recording: true
+    calibration_secs: 5
+
+windowing:
+  chunk_sec: 2.0
+  overlap: 0.5
+  pad_mode: reflect
+
+augment:
+  enabled: false
+  prob:
+    specaugment: 0.0
+  specaugment:
+    time_mask_ms: 0
+    time_masks: 0
+    freq_mask_bins: 0
+    freq_masks: 0
+
+labels:
+  type: strong
+  min_event_sec: 0.12
+  positive_dilation_frames: 1
+  weak_dur_sec: 0.2
+
+model:
+  variant: crnn
+  in_channels: 1
+  hidden: 128
+  dropout: 0.1
+  norm: batch
+  se_blocks: false
+  rnn:
+    type: lstm
+    layers: 1
+    bidirectional: true
+    hidden: 128
+  heads:
+    sed:
+      enabled: true
+      activation: sigmoid
+    count:
+      enabled: false
+
+loss:
+  sed:
+    type: focal
+    pos_weight: 0.0
+    focal_gamma: 2.0
+    focal_alpha: 0.25
+    dice_weight: 0.0
+  l2_weight_decay: 1.0e-4
+
+optimizer:
+  type: adamw
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  betas: [0.9, 0.999]
+  grad_clip_norm: 1.0
+
+scheduler:
+  type: none
+  warmup_epochs: 0
+  min_lr: 1.0e-5
+
+training:
+  epochs: 40
+  batch_size: 4
+  early_stop:
+    enabled: true
+    patience: 5
+  class_balance:
+    sampler: false
+    pos_weight_auto: false
+    beta: 0.5
+
+inference:
+  smoothing:
+    type: moving
+    k_frames: 5
+  hysteresis:
+    th_on: 0.6
+    th_off: 0.4
+  constraints:
+    min_event_sec: 0.1
+    min_gap_sec: 0.3
+  crf:
+    enabled: false
+
+adaptation:
+  adabn:
+    enabled: false
+    recalibrate_secs: 0
+  instancenorm:
+    enabled: false
+  calibration:
+    enabled: false
+    swallows_for_tuning: 0
+
+evaluation:
+  metrics:
+    event_f1: true
+    onset_mae: true
+    count_mae: false
+  tolerances:
+    onset_ms: 200
+    offset_ms: 200
+
+logging:
+  run_naming: "{project_name}_{run_name}_{time}"
+  wandb:
+    enabled: false
+    entity: null
+  tensorboard: false
+  checkpoints:
+    save_top_k: 1
+    monitor: val/event_f1
+    mode: max
+  save_every_epoch: false
+  save_last: true
+  save_best: true
+  top_k: 1
