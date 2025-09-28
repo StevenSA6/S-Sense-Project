@@ -4,20 +4,20 @@ import os
 import math
 
 # ------------- USER PARAMS -------------
-input_path   = "C:\\Workspace\\ProgProj\\filters\\gabor\\data\\tests\\face-IN.mp4"   # can be "input.jpg" or "input.mp4"
-output_root  = "C:\\Workspace\\ProgProj\\filters\\gabor\\data\\tests\\face-out"  # folder for images / basename for video
-use_roi_for_video = True       # when input is a video, ask for ROI
+input_path   = "C:\\Workspace\\ProgProj\\filters\\gabor\\data\\tests\\face-IN.mp4"   
+output_root  = "C:\\Workspace\\ProgProj\\filters\\gabor\\data\\tests\\face-out"  
+use_roi_for_video = True       
 # Gabor bank params
-ksize   = 31        # kernel size (odd). Larger -> more selective, slower
-sigmas  = [4.0]     # Gaussian sigma(s)
-gammas  = [0.5]     # spatial aspect ratios (y/x)
-psis    = [0]       # phase offsets (0 or pi/2 are common)
+ksize   = 31          # kernel size (odd)
+sigmas  = [4.0]       # Gaussian sigma(s)
+gammas  = [0.5]       # spatial aspect ratios (y/x)
+psis    = [0]         # phase offsets (0 or pi/2 are common)
 lambdas = [6, 8, 12]  # wavelengths (pixels). Smaller -> higher frequency
-n_orients = 8       # number of orientations over [0, pi)
+n_orients = 8         # number of orientations over [0, pi)
 # Video smoothing
-ema_alpha = 0.3     # exponential moving average smoothing for energy map (0..1)
+ema_alpha = 0.3       # exponential moving average smoothing for energy map (0..1)
 # Colormap intensity scale for display
-vis_gain = 2.0      # multiply energy before colormap; tweak for visibility
+vis_gain = 2.0        # multiply energy before colormap
 # --------------------------------------
 
 
@@ -31,7 +31,7 @@ def build_gabor_kernels(ksize, sigmas, gammas, psis, lambdas, n_orients):
                 for psi in psis:
                     for lam in lambdas:
                         kern = cv2.getGaborKernel((ksize, ksize), sigma, theta, lam, gamma, psi, ktype=cv2.CV_32F)
-                        # normalize to zero-mean, unit L1 for stability
+                        # normalize to zero-mean
                         kern -= kern.mean()
                         s = np.sum(np.abs(kern))
                         if s > 1e-8:

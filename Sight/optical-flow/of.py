@@ -4,8 +4,8 @@ from scipy.signal import butter, filtfilt
 import csv, os
 
 # ---------------- User params ----------------
-input_path   = "C:\\Workspace\\ProgProj\\filters\\optical-flow\\data\\tests-jg2\\neck-IN.mp4"   
-output_base  = "C:\\Workspace\\ProgProj\\filters\\optical-flow\\data\\tests-jg2\\neck-OUT"      
+input_path   = "C:\\Workspace\\ProgProj\\S-Sense-Project\\Sight\\optical-flow\\data\\tests-jg2\\neck-OUT.mp4"   
+output_base  = "C:\\Workspace\\ProgProj\\S-Sense-Project\\Sight\\optical-flow\\data\\tests-jg2\\neck-evm-OUT"      
 use_roi      = True             # select throat ROI on first frame
 metric_type  = "mag"            # | "v" | "div" | "mag+v"
 band_hz      = (0.3, 2.0)       # passband (Hz): ~0.3–2.0 works for swallow bursts
