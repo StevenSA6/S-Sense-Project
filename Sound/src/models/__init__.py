@@ -15,10 +15,10 @@ def _to_plain(cfg: Cfg) -> Dict[str, Any]:
 
 
 def build_model(cfg: dict | DictConfig):
-    if not isinstance(cfg, DictConfig):
-        cfg = OmegaConf.create(cfg)
+  if not isinstance(cfg, DictConfig):
+    cfg = OmegaConf.create(cfg)
 
-    in_ch = infer_in_channels(cfg)
-    cfg.setdefault("model", {})
-    cfg["model"]["in_ch"] = in_ch
-    return CRNN(cfg)
+  in_ch = infer_in_channels(cfg)
+  cfg.setdefault("model", {})
+  cfg["model"]["in_ch"] = in_ch
+  return CRNN(cfg)
