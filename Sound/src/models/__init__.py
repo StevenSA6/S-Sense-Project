@@ -14,9 +14,11 @@ def _to_plain(cfg: Cfg) -> Dict[str, Any]:
   return cfg
 
 
-def build_model(cfg: Dict | DictConfig):
-  # or pass DictConfig directly if you prefer
-  in_ch = infer_in_channels(OmegaConf.create(cfg))
-  cfg.setdefault("model", {})
-  cfg["model"]["in_ch"] = in_ch
-  return CRNN(cfg)
+def build_model(cfg: dict | DictConfig):
+    if not isinstance(cfg, DictConfig):
+        cfg = OmegaConf.create(cfg)
+
+    in_ch = infer_in_channels(cfg)
+    cfg.setdefault("model", {})
+    cfg["model"]["in_ch"] = in_ch
+    return CRNN(cfg)
