@@ -9,8 +9,17 @@
 #SBATCH --time=04:00:00
 #SBATCH --partition=SCT
 
-# Initialize micromamba shell
-eval "$(micromamba shell hook --shell=bash)"
+# --- Manually initialize micromamba (copied from .bashrc) ---
+export MAMBA_EXE='/opt/home/s3976304/.local/bin/micromamba';
+export MAMBA_ROOT_PREFIX='/opt/home/s3976304/micromamba';
+__mamba_setup="$("$MAMBA_EXE" shell hook --shell bash --root-prefix "$MAMBA_ROOT_PREFIX" 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__mamba_setup"
+else
+    alias micromamba="$MAMBA_EXE"  # Fallback if shell hook fails
+fi
+unset __mamba_setup
+# --- End micromamba setup ---
 
 # Activate environment
 micromamba activate pp1-swallow
