@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=pp1-swallow 
-#SBATCH --output=logs/slurm-%j.out
+#SBATCH --output=logs/train-%j.out    # stdout (normal prints)
+#SBATCH --error=logs/train-%j.err     # stderr (errors)
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
