@@ -59,7 +59,7 @@ features:
   type: mel
   win_ms: 25
   hop_ms: 10
-  n_fft: 512
+  n_fft: 1024  # Increased from 512 to accommodate 25ms window at 32kHz (800 samples)
   n_mels: 64
   fmin: 20
   fmax: 8000
