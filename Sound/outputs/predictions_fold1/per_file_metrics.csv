@@ -1,0 +1,3 @@
+file,event_f1,event_precision,event_recall,count_mae,count_mape_%,onset_mae_sec
+data/audio/skylear_3/1.wav,0.0,0,0.0,20.0,100.0,
+data/audio/skylear_3/2.wav,0.0,0,0.0,9.0,100.0,

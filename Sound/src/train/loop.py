@@ -5,6 +5,9 @@ import time
 import math
 from pathlib import Path
 from typing import Any, Dict, cast
+import numpy as np
+from pathlib import Path
+from train.tester import evaluate_fold
 
 import torch
 import wandb
@@ -171,7 +174,9 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
         opt, lr_lambda=lambda e: float(lr_lambda(e)))
 
   # bookkeeping
-  run_dir = _make_run_dir(cfg, suffix=f"_fold{fold_id}")
+  run_dir = _make_run_dir(cfg, suffix=f"_fold{fold_id}_train")
+  trace_dir = Path(run_dir) / "traces"
+  trace_dir.mkdir(parents=True, exist_ok=True)
   writer = SummaryWriter(os.path.join(run_dir, "tb")
                          ) if cfg.logging.tensorboard else None
   wandb_run = None
@@ -195,7 +200,10 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
       xb, yb, cb = b["x"].to(device), b["y"].to(device), b["count"].to(device)
       opt.zero_grad(set_to_none=True)
       with torch.autocast("cuda", enabled=(cfg.hardware.precision == 16)):
-        out = net(xb)
+        if getattr(net, "use_backbone", False):
+          out = net(x=None, waveform=b["w"].to(device))
+        else:
+          out = net(xb)
         logits = out["logits"]
         # assert isinstance(
         #     cfg, Dict), f"cfg should be of type Dict, but got type {type(cfg)} instead"
@@ -222,7 +230,18 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
     with torch.no_grad():
       for b in val_dl:
         xb, yb = b["x"].to(device), b["y"].to(device)
-        logits = net(xb)["logits"]
+        if getattr(net, "use_backbone", False):
+          logits = net(x=None, waveform=b["w"].to(device))["logits"]
+        else:
+          logits = net(xb)["logits"]
+        if epoch % 5 == 0 and len(trace_dir.parts) > 0:  # every 5 epochs
+          probs = torch.sigmoid(logits).detach().cpu().numpy()
+          labels = yb.detach().cpu().numpy()
+          np.savez(
+              trace_dir / f"epoch{epoch:03d}_batch{len(trace_dir.parts)}.npz",
+              probs=probs,
+              labels=labels
+          )
         val_loss += float(sed_loss(logits, yb,
                           cfg.loss.sed).detach().cpu().item())
         pred = (torch.sigmoid(logits) > 0.5)
@@ -275,4 +294,14 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
   if os.path.exists(best_ckpt):
     state = torch.load(best_ckpt, map_location=device)
     net.load_state_dict(state["model_state"])
+
+  # After best checkpoint loading
+  if os.path.exists(best_ckpt):
+    state = torch.load(best_ckpt, map_location=device)
+    net.load_state_dict(state["model_state"])
+
+  # Run evaluation + save visualization artifacts
+  val_metrics = evaluate_fold(cfg, fold_id, net)
+  print(f"[Fold {fold_id}] Evaluation summary:", val_metrics)
+
   return best_ckpt, net
