@@ -200,7 +200,10 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
       xb, yb, cb = b["x"].to(device), b["y"].to(device), b["count"].to(device)
       opt.zero_grad(set_to_none=True)
       with torch.autocast("cuda", enabled=(cfg.hardware.precision == 16)):
-        out = net(xb)
+        if getattr(net, "use_backbone", False):
+          out = net(x=None, waveform=b["w"].to(device))
+        else:
+          out = net(xb)
         logits = out["logits"]
         # assert isinstance(
         #     cfg, Dict), f"cfg should be of type Dict, but got type {type(cfg)} instead"
@@ -227,7 +230,10 @@ def train_one_fold(cfg: DictConfig, fold_id: int):
     with torch.no_grad():
       for b in val_dl:
         xb, yb = b["x"].to(device), b["y"].to(device)
-        logits = net(xb)["logits"]
+        if getattr(net, "use_backbone", False):
+          logits = net(x=None, waveform=b["w"].to(device))["logits"]
+        else:
+          logits = net(xb)["logits"]
         if epoch % 5 == 0 and len(trace_dir.parts) > 0:  # every 5 epochs
           probs = torch.sigmoid(logits).detach().cpu().numpy()
           labels = yb.detach().cpu().numpy()

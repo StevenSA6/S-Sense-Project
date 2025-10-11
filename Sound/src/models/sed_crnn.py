@@ -64,7 +64,7 @@ class PosEnc(nn.Module):
 
 
 class CRNN(nn.Module):
-  def __init__(self, cfg: Dict | DictConfig):
+  def __init__(self, cfg: Dict | DictConfig, backbone=None):
     super().__init__()
     m = cfg["model"]
     in_ch = int(m.get("in_channels", 1))
@@ -73,15 +73,28 @@ class CRNN(nn.Module):
     norm = m.get("norm", "batch")
     se_blocks = bool(m.get("se_blocks", True))
 
-    self.cnn = nn.Sequential(
-        DSConv(in_ch, 32, norm=norm, p=p, se=se_blocks),
-        DSConv(32, 64, s=(2, 1), norm=norm, p=p, se=se_blocks),
-        DSConv(64, 96, norm=norm, p=p, se=se_blocks),
-        DSConv(96, 128, s=(2, 1), norm=norm, p=p, se=se_blocks),
-    )
-    self.freq_proj = nn.Conv2d(128, hid, kernel_size=(
-        1, 1), bias=False)  # after collapsing F' via pooling
-    self.freq_pool = nn.AdaptiveAvgPool2d((1, None))  # collapse freq
+    # Check if using pretrained backbone
+    self.backbone = backbone
+    self.use_backbone = backbone is not None
+
+    if self.use_backbone:
+      # Use pretrained PANN backbone for feature extraction
+      # Backbone outputs: (B, 2048, freq_bins, time_frames)
+      # We need to project this to our hidden dimension
+      self.backbone_proj = nn.Conv2d(2048, hid, kernel_size=(1, 1), bias=False)
+      self.freq_pool = nn.AdaptiveAvgPool2d((1, None))  # collapse freq
+      print(f"Using PANN backbone: {type(backbone).__name__}")
+    else:
+      # Use standard CNN layers
+      self.cnn = nn.Sequential(
+          DSConv(in_ch, 32, norm=norm, p=p, se=se_blocks),
+          DSConv(32, 64, s=(2, 1), norm=norm, p=p, se=se_blocks),
+          DSConv(64, 96, norm=norm, p=p, se=se_blocks),
+          DSConv(96, 128, s=(2, 1), norm=norm, p=p, se=se_blocks),
+      )
+      self.freq_proj = nn.Conv2d(128, hid, kernel_size=(
+          1, 1), bias=False)  # after collapsing F' via pooling
+      self.freq_pool = nn.AdaptiveAvgPool2d((1, None))  # collapse freq
 
     # Choose temporal encoder based on the configured model variant
     variant = m.get("variant", "crnn")
@@ -131,11 +144,22 @@ class CRNN(nn.Module):
               m.bias, torch.Tensor), f"m.bias should be of type Tensor but got f{type(m.bias)}"
           nn.init.zeros_(m.bias)
 
-  def forward(self, x):  # x: (B,C,F,T)
-    h = self.cnn(x)                      # (B,128,F',T)
-    h = self.freq_pool(h)                # (B,128,1,T)
-    h = self.freq_proj(h).squeeze(2)     # (B,H,T)
-    h = h.transpose(1, 2)                 # (B,T,H)
+  def forward(self, x, waveform=None):  # x: (B,C,F,T) or waveform: (B,L)
+    if self.use_backbone:
+      # Extract features using PANN backbone
+      # Backbone expects raw waveform: (B, L)
+      if waveform is None:
+        raise ValueError("Backbone requires raw waveform input, but waveform=None")
+      h = self.backbone(waveform, return_features=True)  # (B, 2048, freq, time)
+      h = self.freq_pool(h)                # (B, 2048, 1, T)
+      h = self.backbone_proj(h).squeeze(2) # (B, H, T)
+      h = h.transpose(1, 2)                # (B, T, H)
+    else:
+      # Use standard CNN pipeline with mel-spectrogram
+      h = self.cnn(x)                      # (B,128,F',T)
+      h = self.freq_pool(h)                # (B,128,1,T)
+      h = self.freq_proj(h).squeeze(2)     # (B,H,T)
+      h = h.transpose(1, 2)                 # (B,T,H)
     if self.enc_type == "lstm":
       h, _ = self.temporal(h)           # (B,T,E)
     else:
