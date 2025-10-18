@@ -1,0 +1,15 @@
+=== Fold 0/5 ===
+[Fold 0] Evaluation summary: {'event_f1': 0.0, 'event_precision': 0, 'event_recall': 0.0, 'onset_mae_sec': nan}
+{'fold0/event_f1': 0.0, 'fold0/event_precision': 0, 'fold0/event_recall': 0.0, 'fold0/onset_mae_sec': nan}
+=== Fold 1/5 ===
+[Fold 1] Evaluation summary: {'event_f1': 0.0, 'event_precision': 0, 'event_recall': 0.0, 'onset_mae_sec': nan}
+{'fold1/event_f1': 0.0, 'fold1/event_precision': 0, 'fold1/event_recall': 0.0, 'fold1/onset_mae_sec': nan}
+=== Fold 2/5 ===
+[Fold 2] Evaluation summary: {'event_f1': 0.0, 'event_precision': 0, 'event_recall': 0.0, 'onset_mae_sec': nan}
+{'fold2/event_f1': 0.0, 'fold2/event_precision': 0, 'fold2/event_recall': 0.0, 'fold2/onset_mae_sec': nan}
+=== Fold 3/5 ===
+[Fold 3] Evaluation summary: {'event_f1': 0.0, 'event_precision': 0, 'event_recall': 0.0, 'onset_mae_sec': nan}
+{'fold3/event_f1': 0.0, 'fold3/event_precision': 0, 'fold3/event_recall': 0.0, 'fold3/onset_mae_sec': nan}
+=== Fold 4/5 ===
+[Fold 4] Evaluation summary: {'event_f1': 0.0, 'event_precision': 0, 'event_recall': 0.0, 'onset_mae_sec': nan}
+{'fold4/event_f1': 0.0, 'fold4/event_precision': 0, 'fold4/event_recall': 0.0, 'fold4/onset_mae_sec': nan}

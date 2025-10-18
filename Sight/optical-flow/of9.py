@@ -21,8 +21,14 @@ DIFF_THRESH = 18
 BLUR_K = 5
 MIN_BLOB_AREA = 300
 
-# ----------------------------
+# Display settings
+DISPLAY_SCALE = 0.5  # shrink frame to 50%
 
+def resize_for_display(frame, scale=DISPLAY_SCALE):
+    h, w = frame.shape[:2]
+    return cv2.resize(frame, (int(w * scale), int(h * scale)))
+
+# ----------------------------
 cap = cv2.VideoCapture(input_path)
 if not cap.isOpened():
     raise RuntimeError("Could not open video")
@@ -36,12 +42,22 @@ ret, first_frame = cap.read()
 if not ret:
     raise RuntimeError("Could not read first frame")
 
-# 🔄 Rotate first frame to portrait if needed
+# 🔄 Rotate first frame to portrait
 first_frame = cv2.rotate(first_frame, cv2.ROTATE_90_CLOCKWISE)
 
-roi_box = cv2.selectROI("Draw ROI around Adam's apple / throat", first_frame, False, False)
+# ROI selection on smaller window
+cv2.namedWindow("Draw ROI around Adam's apple / throat", cv2.WINDOW_NORMAL)
+first_frame_disp = resize_for_display(first_frame)
+roi_scaled = cv2.selectROI("Draw ROI around Adam's apple / throat",
+                           first_frame_disp, False, False)
 cv2.destroyWindow("Draw ROI around Adam's apple / throat")
-x, y, w, h = map(int, roi_box)
+
+# Map ROI back to full resolution coords
+sx, sy, sw, sh = map(int, roi_scaled)
+x = int(sx / DISPLAY_SCALE)
+y = int(sy / DISPLAY_SCALE)
+w = int(sw / DISPLAY_SCALE)
+h = int(sh / DISPLAY_SCALE)
 
 prev_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
 
@@ -55,6 +71,8 @@ centroid_ema = None
 baseline = None
 swallow_active = False
 
+cv2.namedWindow("Swallow Detector (Portrait Fix)", cv2.WINDOW_NORMAL)
+
 while True:
     ret, frame = cap.read()
     if not ret:
@@ -62,7 +80,6 @@ while True:
 
     # 🔄 Rotate every frame to portrait
     frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # --- ROI crops ---
@@ -85,7 +102,6 @@ while True:
     mhi[motion_bin > 0] = MHI_MAX
 
     # --- Compute vertical centroid of motion ---
-    adams_present = False
     delta_norm = 0
     if cv2.countNonZero((mhi > (0.3 * MHI_MAX)).astype(np.uint8)) > MIN_BLOB_AREA:
         weights = mhi / (MHI_MAX + 1e-6)
@@ -93,7 +109,6 @@ while True:
         col_weights = np.sum(weights, axis=1)
         total_w = np.sum(col_weights) + 1e-6
         centroid_y = float(np.sum(y_coords[:,0] * col_weights) / total_w)
-        adams_present = True
 
         # Smooth centroid
         if centroid_ema is None:
@@ -131,17 +146,17 @@ while True:
     roi_color = frame[y:y+h, x:x+w]
     frame[y:y+h, x:x+w] = cv2.addWeighted(roi_color, 0.5, mhi_vis_c, 0.5, 0)
 
-    # ROI box color: green idle, red if active
+    # ROI box color
     box_color = (0, 255, 0) if not swallow_active else (0, 0, 255)
     cv2.rectangle(frame, (x, y), (x+w, y+h), box_color, 2)
 
     # Draw centroid and baseline lines
     if centroid_ema is not None:
         cy_abs = y + int(round(centroid_ema))
-        cv2.line(frame, (x, cy_abs), (x+w, cy_abs), (255, 255, 255), 1)  # centroid
+        cv2.line(frame, (x, cy_abs), (x+w, cy_abs), (255, 255, 255), 1)
     if baseline is not None:
         by_abs = y + int(round(baseline))
-        cv2.line(frame, (x, by_abs), (x+w, by_abs), (0, 255, 255), 1)   # baseline
+        cv2.line(frame, (x, by_abs), (x+w, by_abs), (0, 255, 255), 1)
 
     # Show counter + delta
     cv2.putText(frame, f"Swallows: {swallow_count}", (10, 30),
@@ -149,7 +164,10 @@ while True:
     cv2.putText(frame, f"delta: {delta_norm:+.2f}", (10, 60),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 230, 0), 2)
 
-    cv2.imshow("Swallow Detector (Portrait Fix)", frame)
+    # 🔍 Show scaled down (50%) in resizable window
+    frame_disp = resize_for_display(frame)
+    cv2.imshow("Swallow Detector (Portrait Fix)", frame_disp)
+
     prev_gray = gray
 
     if cv2.waitKey(delay) & 0xFF == ord('q'):

@@ -95,9 +95,9 @@ class SwallowWindowDataset(Dataset):
   def _get_preprocessed(self, path: Path, events_hint):
     key = str(path)
     if key in self._cache:               # hit
-      X, hop, y_frames, events = self._cache.pop(key)
-      self._cache[key] = (X, hop, y_frames, events)
-      return X, hop, y_frames, events
+      X, hop, y_frames, events, y_p = self._cache.pop(key)
+      self._cache[key] = (X, hop, y_frames, events, y_p)
+      return X, hop, y_frames, events, y_p
 
     # --- compute ONCE per file ---
     y, sr_raw = load_audio(str(path), expected_sr=None, mono=True)
@@ -125,10 +125,10 @@ class SwallowWindowDataset(Dataset):
     ).astype(np.float32)
 
     # LRU insert
-    self._cache[key] = (X, hop, y_frames, events)
+    self._cache[key] = (X, hop, y_frames, events, y_p)
     if len(self._cache) > self._cache_cap:
       self._cache.popitem(last=False)  # evict oldest
-    return X, hop, y_frames, events
+    return X, hop, y_frames, events, y_p
 
   def __len__(self) -> int:
     return len(self.index)
@@ -139,7 +139,8 @@ class SwallowWindowDataset(Dataset):
     path = Path(item["path"])
 
     # compute once per recording, reuse thereafter
-    X, hop, y_full, events = self._get_preprocessed(path, item.get("events"))
+    X, hop, y_full, events, y_p = self._get_preprocessed(
+        path, item.get("events"))
 
     W, idxs = window_into_chunks(
         X, self.cfg.audio_io.model_sr, hop, self.win_cfg)
@@ -149,6 +150,13 @@ class SwallowWindowDataset(Dataset):
     w_ord = min(w_ord, len(idxs)-1)
     x = W[w_ord]
     t0, t1 = idxs[w_ord]
+
+    # Slice aligned waveform section for this window
+    s0, s1 = t0 * hop, t1 * hop
+    w = y_p[s0:s1]
+    need = (t1 - t0) * hop - len(w)
+    if need > 0:
+      w = np.pad(w, (0, need), mode="reflect")
 
     if self.train and self.cfg.augment.enabled and random.random() < self.cfg.augment.prob.specaugment:
       x0 = specaugment(
@@ -163,17 +171,20 @@ class SwallowWindowDataset(Dataset):
     y_win = y_full[t0:t1]
     count_win = counts_from_events(
         events, [(t0, t1)], sr=self.cfg.audio_io.model_sr, hop=hop)[0]
-
-    return {"x": torch.from_numpy(x),
-            "y": torch.from_numpy(y_win).float(),
-            "count": torch.tensor(float(count_win), dtype=torch.float32)}
+    return {
+        "x": torch.from_numpy(x),
+        "w": torch.from_numpy(w).float(),
+        "y": torch.from_numpy(y_win).float(),
+        "count": torch.tensor(float(count_win), dtype=torch.float32)
+    }
 
 
 def collate_batch(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
   xs = torch.stack([b["x"] for b in batch], dim=0)
+  ws = torch.stack([b["w"] for b in batch], dim=0)
   ys = torch.stack([b["y"] for b in batch], dim=0)
   cnt = torch.stack([b["count"] for b in batch], dim=0)
-  return {"x": xs, "y": ys, "count": cnt}
+  return {"x": xs, "w": ws, "y": ys, "count": cnt}
 
 
 def _frame_params_ms(sr: int, win_ms: float, hop_ms: float) -> Tuple[int, int]:

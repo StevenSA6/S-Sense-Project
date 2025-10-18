@@ -3,8 +3,8 @@ import numpy as np
 from scipy.signal import butter, filtfilt
 
 # --- params ---
-input_path  = "C:\\Workspace\\ProgProj\\filters\\eularian-video-magnification\\data\\tests-ik\\face-IN.mp4"
-output_path = "C:\\Workspace\\ProgProj\\filters\\eularian-video-magnification\\data\\tests-ik\\face-OUT.mp4"
+input_path  = "C:\\Workspace\\ProgProj\\filters\\eularian-video-magnification\\data\\tests-ik\\throat-IN.mp4"
+output_path = "C:\\Workspace\\ProgProj\\filters\\eularian-video-magnification\\data\\tests-ik\\throat-OUT.mp4"
 alpha       = 50.0           # amplification factor
 fl, fh      = 0.8, 2.0       # band (Hz): 0.8–2.0 ~ heart-rate
 pyr_scale   = 0.5            # downsample factor for speed (0.5 = half-size)

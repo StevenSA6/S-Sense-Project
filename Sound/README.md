@@ -147,3 +147,5 @@ To understand the code and repository, read in this order. Stop after each file 
 
 ## References
 Annamaria Mesaros, Toni Heittola, and Tuomas Virtanen, “Metrics for polyphonic sound event detection”, Applied Sciences, 6(6):162, 2016
+
+Backbones have been downloaded from [Zenodo](https://zenodo.org/records/3987831)

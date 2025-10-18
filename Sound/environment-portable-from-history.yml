@@ -1,0 +1,25 @@
+name: pp1-swallow
+channels:
+  - conda-forge
+  - nvidia
+  - pytorch
+dependencies:
+  - python==3.10.18
+  - conda-forge::librosa
+  - conda-forge::matplotlib
+  - conda-forge::numpy
+  - conda-forge::omegaconf
+  - conda-forge::pandas
+  - conda-forge::pyloudnorm
+  - conda-forge::pysoundfile
+  - pytorch::pytorch
+  - pytorch::pytorch-cuda
+  - conda-forge::scikit-learn
+  - conda-forge::scipy
+  - conda-forge::soxr
+  - conda-forge::tensorboard
+  - pytorch::torchaudio
+  - pytorch::torchvision
+  - conda-forge::tqdm
+  - conda-forge::uv
+  - conda-forge::wandb
