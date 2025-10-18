@@ -1,12 +1,14 @@
 import cv2
 import os
 
-# --- Configuration ---
+# ------------------------------
+# config
 video_path = r"C:\Workspace\ProgProj\S-Sense-Project\Sight\split-frames\tests-jg3\throat-IN.mp4"
 output_folder = r"C:\Workspace\ProgProj\S-Sense-Project\Sight\split-frames\dataset\frames"
 os.makedirs(output_folder, exist_ok=True)
+# ------------------------------
 
-# --- Open video ---
+# Open video
 cap = cv2.VideoCapture(video_path)
 frame_count = 0
 
