@@ -3,7 +3,8 @@ import numpy as np
 import os
 import math
 
-# ------------- USER PARAMS -------------
+# ------------------------------
+# params
 input_path   = "C:\\Workspace\\ProgProj\\filters\\gabor\\data\\tests\\face-IN.mp4"   
 output_root  = "C:\\Workspace\\ProgProj\\filters\\gabor\\data\\tests\\face-out"  
 use_roi_for_video = True       
@@ -18,7 +19,7 @@ n_orients = 8         # number of orientations over [0, pi)
 ema_alpha = 0.3       # exponential moving average smoothing for energy map (0..1)
 # Colormap intensity scale for display
 vis_gain = 2.0        # multiply energy before colormap
-# --------------------------------------
+# ------------------------------
 
 
 def build_gabor_kernels(ksize, sigmas, gammas, psis, lambdas, n_orients):
@@ -63,7 +64,7 @@ def apply_gabor_bank(gray, kernels):
 def make_montage(responses, max_cols=4):
     """
     Build a quick montage of per-orientation responses (first N filters across orientations).
-    We pick one wavelength per orientation (the smallest) for a compact view.
+    Pick one wavelength per orientation (the smallest) for a compact view.
     """
     # choose one response per orientation (lowest lambda)
     per_theta = {}
@@ -74,7 +75,7 @@ def make_montage(responses, max_cols=4):
             per_theta[key] = (lam, mag)
 
     tiles = [per_theta[k][1] for k in sorted(per_theta.keys())]
-    # normalize each tile to 0-255 for view
+    # normalise each tile to 0-255 for view
     tiles_u8 = []
     for t in tiles:
         t_norm = t - t.min()
@@ -102,7 +103,7 @@ def make_montage(responses, max_cols=4):
 def overlay_heatmap(bgr, scalar_map, gain=1.0, alpha=0.6):
     """
     Overlay heatmap of scalar_map onto bgr.
-    scalar_map should be float32; we'll normalize to 0-255 after gain.
+    scalar_map should be float32; normalise to 0-255 after gain.
     """
     m = scalar_map.copy()
     m = m * gain

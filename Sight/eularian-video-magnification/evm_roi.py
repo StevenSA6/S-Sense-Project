@@ -2,7 +2,8 @@ import cv2
 import numpy as np
 from scipy.signal import butter, filtfilt
 
-# --- params ---
+# ------------------------------
+# params
 input_path  = "C:\\Workspace\\ProgProj\\filters\\eularian-video-magnification\\data\\tests-ik\\throat-IN.mp4"
 output_path = "C:\\Workspace\\ProgProj\\filters\\eularian-video-magnification\\data\\tests-ik\\throat-OUT.mp4"
 alpha       = 50.0           # amplification factor
