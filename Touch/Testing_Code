@@ -1,28 +1,49 @@
 const int ledPin = 13;
 const int knockSensor = A0;
-const int threshold = 20;
+const int threshold = 20; //Sensitivity of Piezo Sensor
 
 int sensorReading = 0;
 int ledState = LOW;
+bool Swallow = false;
 
 void setup() {
   pinMode(ledPin, OUTPUT);
   Serial.begin(9600);
-  while (!Serial) { ; }       
-  Serial.println("time_ms,value");  // Title of CSV File
+  while (!Serial) { ; }
+  Serial.println("time_ms,value,swallow_status");  // Label of columns in data output
 }
 
 void loop() {
   sensorReading = analogRead(knockSensor);
-
   if (sensorReading >= threshold) {
     ledState = !ledState;
     digitalWrite(ledPin, ledState);
   }
 
-  Outputs every 10 miliseconds
-  Serial.print(millis());
+  // everytime the user swallows, they press q on the keyboard to indicate that they have swallowed
+  while (Serial.available() > 0) {
+    char IndicateSwallow = Serial.read();
+    if (IndicateSwallow == 'q') { //checks if q is pressed
+      Swallow = true; 
+    }
+  }
+
+  // Values that are being printed (seperated by commas):
+
+  //time (in miliseconds)
+  unsigned long t = millis();
+  Serial.print(t);
   Serial.print(",");
-  Serial.println(sensorReading);
-  delay(10);
+
+  //piezo sensor reading
+  Serial.print(sensorReading);
+  Serial.print(",");
+
+  //If user has swallowed
+  if (Swallow) Serial.print("swallow"); //when q is pressed the word 'swallow' is outputted
+  Serial.println();
+
+  Swallow = false;
+
+  delay(50); //50 second delay between each value outputted
 }
