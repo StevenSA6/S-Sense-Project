@@ -1,0 +1,10 @@
+# Dataset Path
+path: .
+
+train: images\ 
+val: images\ 
+
+# Class Names
+names:
+  0: neutral
+  1: swallow
