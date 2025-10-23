@@ -1,0 +1,3 @@
+C:\Users\galej\yolov11-env\Scripts\Activate.ps1
+
+ PS C:\Workspace\ProgProj\vor\yolov11-cpu\dataset> python predict_offline.py
